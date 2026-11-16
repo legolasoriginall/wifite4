@@ -19,10 +19,10 @@ else
   c_reset='' c_ok='' c_warn='' c_err='' c_info=''
 fi
 
+die()  { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*" >&2; exit 1; }
 say()  { printf '%s[*]%s %s\n' "$c_info" "$c_reset" "$*"; }
 ok()   { printf '%s[+]%s %s\n' "$c_ok" "$c_reset" "$*"; }
 warn() { printf '%s[!]%s %s\n' "$c_warn" "$c_reset" "$*"; }
-die()  { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*"; exit 1; }
 
 usage() {
   cat <<'EOF'
@@ -91,23 +91,15 @@ else
   say "مقصد قبلی حذف شد (در صورت وجود)"
 fi
 
-# ۴. کپی فایل
+# ۴. کپی فایل + مجوز اجرا (install -m 755 شامل +x است)
 if (( DRY_RUN == 1 )); then
   warn "dry-run: install -m 755 $SRC $DEST"
 else
   install -m 755 "$SRC" "$DEST"
-  ok "فایل کپی شد: $DEST"
+  ok "فایل کپی و قابل اجرا شد: $DEST"
 fi
 
-# ۵. مجوز اجرا
-if (( DRY_RUN == 1 )); then
-  warn "dry-run: chmod +x $DEST"
-else
-  chmod +x "$DEST"
-  ok "مجوز اجرا اعمال شد (chmod +x)"
-fi
-
-# ۶. تأیید
+# ۵. تأیید
 if (( DRY_RUN == 0 )); then
   if [[ -x "$DEST" ]]; then
     ok "تأیید: $DEST قابل اجرا است"

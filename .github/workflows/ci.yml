@@ -19,15 +19,6 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
-      - name: Verify syntax with bash -n
-        run: |
-          set -euo pipefail
-          shopt -s globstar
-          for f in **/*.sh; do
-            bash -n "$f"
-            echo "OK: $f"
-          done
-
       - name: Run shellcheck on all scripts
         run: |
           set -euo pipefail
@@ -45,13 +36,6 @@ jobs:
           for t in airmon-ng hcxdumptool hashcat hcxpcapngtool hcxhashtool airodump-ng mdk4 reaver bettercap hostapd-mana wifiphisher kwp macchanger iw jq xxd comm sort; do printf '#!/usr/bin/env bash\nexit 0\n' > "$MOCK_DIR/$t" && chmod +x "$MOCK_DIR/$t"; done
           printf '#!/usr/bin/env bash\n/usr/bin/grep "$@"\n' > "$MOCK_DIR/grep" && chmod +x "$MOCK_DIR/grep"
 
-          echo "=== bash -n with mock tools ==="
-          shopt -s globstar
-          for f in **/*.sh; do
-            bash -n "$f"
-            echo "OK (mock): $f"
-          done
-
           echo "=== Exercise parsing logic (safe modes) ==="
           bash autopwn-ng.sh --dry-run >/dev/null
           echo "OK: autopwn-ng.sh --dry-run"
@@ -68,6 +52,3 @@ jobs:
 
           echo "✓ Mock-mode syntax and parsing checks passed"
           rm -rf "$MOCK_DIR"
-
-      - name: Final status
-        run: echo "CI complete"

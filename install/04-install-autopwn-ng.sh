@@ -18,6 +18,5 @@ bash -n "$SRC" || die "خطای سینتکس در $SRC"
 # Remove any existing destination (file, symlink, or stale entry) before installing
 rm -f "$DEST"
 install -m 755 "$SRC" "$DEST"
-chmod +x "$DEST"
-echo "[+] نصب شد: $DEST (مجوز اجرا: +x)"
+echo "[+] نصب شد: $DEST"
 echo "[+] اجرا: sudo autopwn-ng --help"

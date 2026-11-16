@@ -8,9 +8,18 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
-# ---------------------------------------------------------------- prerequisite checks
-die() { printf '\033[1;31m[-]\033[0m %s\n' "$*" >&2; exit 1; }
+DRY_RUN=0
+ORIGINAL_ARGS=("$@")
 
+if [[ -t 1 ]]; then
+  c_reset=$'\033[0m' c_ok=$'\033[32m' c_warn=$'\033[33m' c_err=$'\033[31m' c_info=$'\033[36m'
+else
+  c_reset='' c_ok='' c_warn='' c_err='' c_info=''
+fi
+
+die() { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*" >&2; exit 1; }
+
+# ---------------------------------------------------------------- prerequisite checks
 command -v bash >/dev/null 2>&1 || die "bash پیدا نشد."
 command -v apt-get >/dev/null 2>&1 || die "apt-get پیدا نشد."
 command -v git >/dev/null 2>&1 || die "git پیدا نشد."
@@ -22,19 +31,9 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$REPO_DIR/install/02-build-hostapd-mana.sh" ]] || die "install/02-build-hostapd-mana.sh پیدا نشد."
 [[ -f "$REPO_DIR/autopwn-ng.sh" ]] || die "autopwn-ng.sh پیدا نشد."
 
-DRY_RUN=0
-ORIGINAL_ARGS=("$@")
-
-if [[ -t 1 ]]; then
-  c_reset=$'\033[0m' c_ok=$'\033[32m' c_warn=$'\033[33m' c_err=$'\033[31m' c_info=$'\033[36m'
-else
-  c_reset='' c_ok='' c_warn='' c_err='' c_info=''
-fi
-
 say()  { printf '%s[*]%s %s\n' "$c_info" "$c_reset" "$*"; }
 ok()   { printf '%s[+]%s %s\n' "$c_ok" "$c_reset" "$*"; }
 warn() { printf '%s[!]%s %s\n' "$c_warn" "$c_reset" "$*"; }
-die()  { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*"; exit 1; }
 
 usage() {
   cat <<'EOF'
@@ -111,8 +110,7 @@ else
   bash -n "$SRC" || die "خطای سینتکس در $SRC"
   rm -f "$DEST"
   install -m 755 "$SRC" "$DEST"
-  chmod +x "$DEST"
-  ok "autopwn-ng نصب شد: $DEST (chmod +x)"
+  ok "autopwn-ng نصب شد: $DEST"
 fi
 
 if (( DRY_RUN == 1 )); then
