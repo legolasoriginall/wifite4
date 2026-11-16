@@ -17,15 +17,14 @@ else
 fi
 
 die() { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*" >&2; exit 1; }
+say()  { printf '%s[*]%s %s\n' "$c_info" "$c_reset" "$*"; }
+ok()   { printf '%s[+]%s %s\n' "$c_ok" "$c_reset" "$*"; }
+warn() { printf '%s[!]%s %s\n' "$c_warn" "$c_reset" "$*"; }
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$REPO_DIR/install/01-install-packages.sh" ]] || die "install/01-install-packages.sh پیدا نشد."
 [[ -f "$REPO_DIR/install/02-build-hostapd-mana.sh" ]] || die "install/02-build-hostapd-mana.sh پیدا نشد."
 [[ -f "$REPO_DIR/autopwn-ng.sh" ]] || die "autopwn-ng.sh پیدا نشد."
-
-say()  { printf '%s[*]%s %s\n' "$c_info" "$c_reset" "$*"; }
-ok()   { printf '%s[+]%s %s\n' "$c_ok" "$c_reset" "$*"; }
-warn() { printf '%s[!]%s %s\n' "$c_warn" "$c_reset" "$*"; }
 
 usage() {
   cat <<'EOF'
@@ -100,7 +99,6 @@ if (( DRY_RUN == 1 )); then
 else
   [[ -f "$SRC" ]] || die "autopwn-ng.sh پیدا نشد: $SRC"
   bash -n "$SRC" || die "خطای سینتکس در $SRC"
-  rm -f "$DEST"
   install -m 755 "$SRC" "$DEST"
   ok "autopwn-ng نصب شد: $DEST"
 fi

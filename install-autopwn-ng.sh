@@ -18,7 +18,10 @@ for arg in "$@"; do
   esac
 done
 
-(( EUID != 0 && DRY_RUN == 0 )) && { echo "Root required: sudo bash install-autopwn-ng.sh" >&2; exit 1; }
+if (( EUID != 0 && DRY_RUN == 0 )); then
+  echo "Root required: sudo bash install-autopwn-ng.sh" >&2
+  exit 1
+fi
 [[ -f "$SRC" ]] || { echo "File not found: $SRC" >&2; exit 1; }
 bash -n "$SRC" || { echo "Syntax error in $SRC" >&2; exit 1; }
 
@@ -27,7 +30,6 @@ if (( DRY_RUN == 1 )); then
   exit 0
 fi
 
-rm -f "$DEST"
 install -m 755 "$SRC" "$DEST"
 echo "Installed: $DEST"
 echo "Run: sudo autopwn-ng --help"

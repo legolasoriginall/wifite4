@@ -6,7 +6,7 @@ export DEBIAN_FRONTEND=noninteractive
 # ---------------------------------------------------------------- prerequisite checks
 die() { printf '\033[1;31m[-]\033[0m %s\n' "$*" >&2; exit 1; }
 
-command -v apt-get >/dev/null 2>&1 || die "apt-get پیدا نشد. این اسکریپت فقط روی Debian/Ubuntu/Kali/Parrot کار می‌کند."
+command -v apt-get >/dev/null || die "apt-get پیدا نشد. این اسکریپت فقط روی Debian/Ubuntu/Kali/Parrot کار می‌کند."
 (( EUID == 0 )) || die "به root نیاز دارد: sudo bash install/01-install-packages.sh"
 
 # ---------------------------------------------------------------- install

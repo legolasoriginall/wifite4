@@ -6,8 +6,8 @@ export DEBIAN_FRONTEND=noninteractive
 # ---------------------------------------------------------------- prerequisite checks
 die() { printf '\033[1;31m[-]\033[0m %s\n' "$*" >&2; exit 1; }
 
-command -v apt-get >/dev/null 2>&1 || die "apt-get پیدا نشد."
-command -v git >/dev/null 2>&1 || die "git پیدا نشد. ابتدا نصب کن: sudo apt-get install -y git"
+command -v apt-get >/dev/null || die "apt-get پیدا نشد."
+command -v git >/dev/null || die "git پیدا نشد. ابتدا نصب کن: sudo apt-get install -y git"
 (( EUID == 0 )) || die "به root نیاز دارد: sudo bash install/02-build-hostapd-mana.sh"
 
 # ---------------------------------------------------------------- install deps + build
@@ -17,7 +17,7 @@ apt-get install -y --no-install-recommends \
 
 HOSTAPD_DIR=/opt/hostapd-mana
 
-# shellcheck source=/dev/null  # resolved at runtime via dirname
+# shellcheck disable=SC1091  # resolved at runtime via dirname
 . "$(dirname "$0")/common.sh"
 
 clone_or_replace "$HOSTAPD_DIR" https://github.com/sensepost/hostapd-mana
