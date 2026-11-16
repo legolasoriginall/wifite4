@@ -637,7 +637,7 @@ if [ "$SKIP_TO" -le 7 ] && [ "$DO_HARVEST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]
       | jq -s '.' > "$REPORT/loot.json" 2>/dev/null || true
   fi
 
-  if [ -s "$LOOT" ] && [ "$(wc -l < "$LOOT")" -gt 1 ]; then
+  if [ "$(wc -l < "$LOOT")" -gt 1 ]; then
     ok "اعتبارنامه‌های HTTP ذخیره شدند: $LOOT"
     c "تعداد: $(( $(wc -l < "$LOOT") - 1 ))"
   else
