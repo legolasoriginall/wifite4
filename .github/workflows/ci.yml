@@ -60,6 +60,11 @@ jobs:
           set -euo pipefail
           bash tests/test-autopwn-ng.sh
 
+      - name: Integration tests — mocked tools & flag combinations
+        run: |
+          set -euo pipefail
+          bash tests/test-integration.sh
+
       - name: Rerun / idempotency mock test
         run: |
           set -euo pipefail
