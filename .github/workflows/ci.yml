@@ -59,3 +59,8 @@ jobs:
         run: |
           set -euo pipefail
           bash tests/test-autopwn-ng.sh
+
+      - name: Rerun / idempotency mock test
+        run: |
+          set -euo pipefail
+          bash tests/test-rerun.sh
