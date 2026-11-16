@@ -42,13 +42,11 @@ show_menu() {
   printf '%s╔══════════════════════════════════════╗%s\n' "$c_bold" "$c_reset"
   printf '%s║   منوی اجرای autopwn-ng              ║%s\n' "$c_bold" "$c_reset"
   printf '%s╠══════════════════════════════════════╣%s\n' "$c_bold" "$c_reset"
-  printf '%s║  1) پیش‌فرض (normal)                  ║%s\n' "$c_info" "$c_reset"
-  printf '%s║  2) stealth (مخفی، MAC رندوم)         ║%s\n' "$c_info" "$c_reset"
-  printf '%s║  3) brute (تهاجمی، workload بالا)     ║%s\n' "$c_info" "$c_reset"
-  printf '%s║  4) هدف مشخص (target BSSID)           ║%s\n' "$c_info" "$c_reset"
-  printf '%s║  5) بدون فازهای بلند (no-twin/no-post)║%s\n' "$c_info" "$c_reset"
-  printf '%s║  6) dry-run / simulate                ║%s\n' "$c_info" "$c_reset"
-  printf '%s║  7) یک کلیک (auto) — اسکن+کرک+گزارش  ║%s\n' "$c_ok" "$c_reset"
+  printf '%s║  1) اجرا (انتخاب پروفایل)            ║%s\n' "$c_info" "$c_reset"
+  printf '%s║  2) هدف مشخص (target BSSID)           ║%s\n' "$c_info" "$c_reset"
+  printf '%s║  3) اسکن سریع (no-twin/no-post)       ║%s\n' "$c_info" "$c_reset"
+  printf '%s║  4) dry-run / simulate                ║%s\n' "$c_info" "$c_reset"
+  printf '%s║  5) یک کلیک (auto) — اسکن+کرک+گزارش  ║%s\n' "$c_ok" "$c_reset"
   printf '%s║  0) خروج                              ║%s\n' "$c_warn" "$c_reset"
   printf '%s╚══════════════════════════════════════╝%s\n' "$c_bold" "$c_reset"
   echo
@@ -56,76 +54,61 @@ show_menu() {
 
 # ---------------------------------------------------------------- read iface
 read_iface() {
-  local default_iface
+  local default_iface default_iface2
   default_iface=$(iw dev 2>/dev/null | awk '/Interface/{print $2; exit}')
   read -rp "اینترفیس اصلی [-i] (پیش‌فرض: ${default_iface:-wlan1}): " IFACE
   IFACE="${IFACE:-${default_iface:-wlan1}}"
 
-  local default_iface2
   default_iface2=$(iw dev 2>/dev/null | awk -v skip="$IFACE" '/Interface/ && $2 != skip {print $2; exit}')
   read -rp "اینترفیس دوم [-I] برای evil twin (پیش‌فرض: ${default_iface2:-}): " IFACE2
   IFACE2="${IFACE2:-$default_iface2}"
 }
 
+# ---------------------------------------------------------------- run autopwn-ng with optional second iface
+run_ap() {
+  # All args passed through; -I added automatically if IFACE2 is set
+  if [[ -n "${IFACE2:-}" ]]; then
+    autopwn-ng -i "$IFACE" -I "$IFACE2" "$@"
+  else
+    autopwn-ng -i "$IFACE" "$@"
+  fi
+}
+
 # ---------------------------------------------------------------- main loop
 while true; do
   show_menu
-  read -rp "انتخاب کنید [0-7]: " choice
+  read -rp "انتخاب کنید [0-5]: " choice
 
   case "$choice" in
     1)
       read_iface
-      say "اجرای پیش‌فرض (normal)..."
-      if [[ -n "$IFACE2" ]]; then
-        autopwn-ng -i "$IFACE" -I "$IFACE2"
-      else
-        autopwn-ng -i "$IFACE"
-      fi
+      read -rp "پروفایل (normal/stealth/brute) [normal]: " prof
+      prof="${prof:-normal}"
+      say "اجرای $prof..."
+      run_ap -p "$prof"
       ;;
     2)
-      read_iface
-      say "اجرای stealth (MAC رندوم، برداشت طولانی)..."
-      autopwn-ng -i "$IFACE" -p stealth
-      ;;
-    3)
-      read_iface
-      say "اجرای brute (تهاجمی، workload بالا)..."
-      if [[ -n "$IFACE2" ]]; then
-        autopwn-ng -i "$IFACE" -I "$IFACE2" -p brute
-      else
-        autopwn-ng -i "$IFACE" -p brute
-      fi
-      ;;
-    4)
       read_iface
       read -rp "BSSID هدف: " target
       [[ -z "$target" ]] && { warn "BSSID وارد نشد."; continue; }
       say "اجرای هدف مشخص: $target"
-      if [[ -n "$IFACE2" ]]; then
-        autopwn-ng -i "$IFACE" -I "$IFACE2" --target "$target"
-      else
-        autopwn-ng -i "$IFACE" --target "$target"
-      fi
+      run_ap --target "$target"
       ;;
-    5)
+    3)
       read_iface
       read -rp "مدت برداشت به ثانیه (پیش‌فرض 90): " t
       t="${t:-90}"
       say "اجرای بدون فازهای بلند (no-twin, no-post, t=$t)..."
       autopwn-ng -i "$IFACE" --no-twin --no-post -t "$t"
       ;;
-    6)
+    4)
       say "شبیه‌سازی (بدون ابزار و تغییر روی سیستم)..."
       autopwn-ng --dry-run
       ;;
-    7)
+    5)
       read_iface
       say "حالت یک کلیک (auto): اسکن + انتخاب هدف + کرک + گزارش..."
-      if [[ -n "$IFACE2" ]]; then
-        autopwn-ng -i "$IFACE" -I "$IFACE2" --auto
-      else
-        autopwn-ng -i "$IFACE" --auto
-      fi
+      run_ap --auto
       ;;
     0)
       say "خروج."
