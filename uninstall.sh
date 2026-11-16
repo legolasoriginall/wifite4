@@ -5,9 +5,7 @@
 # ==========================================================================
 set -euo pipefail
 
-export DEBIAN_FRONTEND=noninteractive
-
-WITH_WORDLISTS=1
+KEEP_WORDLISTS=0
 DRY_RUN=0
 
 if [[ -t 1 ]]; then
@@ -31,21 +29,20 @@ usage() {
   bash uninstall.sh --dry-run            فقط نمایش آنچه حذف می‌شود
   bash uninstall.sh --help              همین راهنما
 
-مراحل حذف:
-  1) /usr/local/bin/autopwn-ng
-  2) /usr/local/bin/hostapd-mana
-  3) /usr/local/bin/kwp
-  4) /opt/hostapd-mana
-  5) /opt/wordlists (مگر --keep-wordlists)
-  6) hashcat rules (OneRuleToRuleThemAll.rule)
+حذف می‌شود:
+  /usr/local/bin/autopwn-ng, hostapd-mana, kwp
+  /opt/hostapd-mana
+  /opt/wordlists (مگر --keep-wordlists)
+  /usr/share/hashcat/rules/OneRuleToRuleThemAll.rule
 
-گزارش حذف در /var/log/wifite4-uninstall.log ذخیره می‌شود.
+بسته‌های apt حذف نمی‌شوند — برای حذف دستی:
+  sudo apt-get remove --purge aircrack-ng hcxtools hcxdumptool hashcat reaver mdk4 bettercap
 EOF
 }
 
 while (( $# > 0 )); do
   case "$1" in
-    --keep-wordlists) WITH_WORDLISTS=0 ;;
+    --keep-wordlists) KEEP_WORDLISTS=1 ;;
     --dry-run)        DRY_RUN=1 ;;
     -h|--help)        usage; exit 0 ;;
     *)                usage >&2; die "گزینه‌ی ناشناخته: $1" ;;
@@ -67,7 +64,7 @@ fi
 
 # ---------------------------------------------------------------- log
 if (( DRY_RUN == 0 )); then
-  mkdir -p "$(dirname /var/log/wifite4-uninstall.log)" 2>/dev/null || true
+  mkdir -p /var/log 2>/dev/null || true
   exec > >(tee -a /var/log/wifite4-uninstall.log) 2>&1
   say "گزارش حذف: /var/log/wifite4-uninstall.log"
 fi
@@ -94,29 +91,19 @@ else
   say "wifite4 — حذف کامل"
 fi
 
-# --- binaries ---
 remove "/usr/local/bin/autopwn-ng" "autopwn-ng"
 remove "/usr/local/bin/hostapd-mana" "hostapd-mana"
 remove "/usr/local/bin/kwp" "kwp"
+remove "/opt/hostapd-mana" "hostapd-mana source/build"
 
-# --- directories ---
-remove_path "/opt/hostapd-mana" "hostapd-mana source/build"
-
-if (( WITH_WORDLISTS == 1 )); then
-  remove_path "/opt/wordlists" "wordlists, SecLists, Probable-Wordlists"
+if (( KEEP_WORDLISTS == 0 )); then
+  remove "/opt/wordlists" "wordlists, SecLists, Probable-Wordlists"
 else
   warn "وردلیست‌ها حفظ شدند (--keep-wordlists)."
 fi
 
-# --- hashcat rules ---
 remove "/usr/share/hashcat/rules/OneRuleToRuleThemAll.rule" "hashcat rule"
 
-# --- optional: remove apt packages (ask or skip) ---
-say "بسته‌های apt (aircrack-ng, hashcat, …) حذف نمی‌شوند — برای حذف دستی:"
-say "  sudo apt-get remove --purge aircrack-ng hcxtools hcxdumptool hashcat reaver mdk4 bettercap"
-
-if (( DRY_RUN == 1 )); then
-  ok "dry-run تمام شد — هیچ تغییری روی سیستم اعمال نشد."
-else
+if (( DRY_RUN == 0 )); then
   ok "حذف کامل شد."
 fi
