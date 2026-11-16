@@ -156,9 +156,12 @@ sudo autopwn-ng --help
 1. **برداشت** — `hcxdumptool` برای PMKID/EAPOL/EAP، `mdk4` برای دِاوث، `airodump-ng` برای اسکن موازی
 2. **نرمال‌سازی** — `hcxpcapngtool` و `hcxhashtool` برای استخراج و حذف تکراری هش‌ها
 3. **کرک** — لایه‌لایه با hashcat: دیکشنری مشتق از SSID، `rockyou`، ruleها، ماسک عددی/موبایل ایرانی، هیبرید، keyboard walk، و MSCHAPv2 برای Enterprise
-4. **WPS** — Pixie Dust با `reaver`
+4. **WPS** — Pixie Dust با `reaver` + brute-force با `bully` + اسکن با `wash`
 5. **Evil Twin** — `hostapd-mana` (یا `wifiphisher`) و جمع‌آوری اعتبارنامه
-6. **Post-exploit** — ساخت اسکریپت اتصال به شبکه کرک‌شده + MITM با `bettercap`
+6. **Post-exploit** — ساخت اسکریپت اتصال به شبکه کرک‌شده + MITM با `bettercap` + اسکن با `nmap`
+7. **تحلیل بسته‌ها** — `tshark` برای شناسایی Enterprise/WPS/کلاینت‌ها
+8. **شناسایی منفعل** — `kismet` برای کشف شبکه‌های پنهان و کلاینت‌ها
+9. **حملهٔ سریع** — `cowpatty` برای حملهٔ دیکشنری سریع WPA-PSK
 
 ## نکات شناخته‌شده
 

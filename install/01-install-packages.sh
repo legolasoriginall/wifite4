@@ -18,6 +18,7 @@ sudo apt-get update || echo "[!] apt-get update had issues, continuing..." >&2
 sudo apt-get install -y --no-install-recommends \
   aircrack-ng hcxtools hcxdumptool hashcat reaver mdk4 \
   bettercap iw pocl-opencl-icd xxd jq \
+  bully wash kismet tshark dnsmasq nmap cowpatty \
   || die "نصب بسته‌ها ناموفق بود. خروجی apt-get را بررسی کن."
 
 echo "[+] بسته‌های پایه نصب/به‌روز شدند."

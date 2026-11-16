@@ -171,7 +171,7 @@ verify_install() {
   fi
   [[ -x "$bin" ]] || die "نصب نهایی تأیید نشد: $bin وجود ندارد یا اجراپذیر نیست."
   ok "autopwn-ng نصب شد: $bin"
-  for t in hashcat hcxdumptool hcxpcapngtool airodump-ng reaver mdk4 bettercap hostapd-mana; do
+  for t in hashcat hcxdumptool hcxpcapngtool airodump-ng reaver mdk4 bettercap hostapd-mana bully wash kismet tshark nmap cowpatty; do
     if command -v "$t" >/dev/null 2>&1; then
       ok "  $t"
     else
