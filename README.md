@@ -14,11 +14,11 @@
 | [`setup.sh`](setup.sh) | نصب خودکار همه‌ی مراحل به ترتیب، با بررسی پیش‌نیازها (root، اینترنت، `git`/`wget`، فضای دیسک، اینترفیس وای‌فای) |
 | [`install-all.sh`](install-all.sh) | نصب سریع: بسته‌ها + hostapd-mana + autopwn-ng + chmod +x (بدون وردلیست‌ها) |
 | [`uninstall.sh`](uninstall.sh) | حذف کامل: binaries، directories، rules |
-| [`install/01-install-packages.sh`](install/01-install-packages.sh) | نصب بسته‌های پایه: `aircrack-ng`، `hcxtools`، `hcxdumptool`، `hashcat`، `reaver`، `mdk4`، `bettercap`، `iw`، `pocl-opencl-icd`، `xxd`، `jq` |
+| [`install/01-install-packages.sh`](install/01-install-packages.sh) | نصب بسته‌های پایه: `aircrack-ng`، `hcxtools`، `hcxdumptool`، `hashcat`، `reaver`، `mdk4`، `bettercap`، `iw`، `xxd`، `jq`، `bully`، `wash`، `kismet`، `tshark`، `dnsmasq`، `nmap`، `cowpatty` |
 | [`install/02-build-hostapd-mana.sh`](install/02-build-hostapd-mana.sh) | نصب پیش‌نیازهای کامپایل و ساخت `hostapd-mana` و نصب آن در `/usr/local/bin` |
 | [`install/03-download-wordlists.sh`](install/03-download-wordlists.sh) | دانلود `rockyou`، `SecLists`، `Probable-Wordlists`، ruleهای تهاجمی و ساخت `kwp` در `/opt/wordlists` |
 | [`install/04-install-autopwn-ng.sh`](install/04-install-autopwn-ng.sh) | نصب `autopwn-ng` در `/usr/local/bin/autopwn-ng` با مجوز اجرا (`755`) و بررسی سینتکس پیش از نصب |
-| [`install-autopwn-ng.sh`](install-autopwn-ng.sh) | نصب مستقل `autopwn-ng` با `chmod +x` در مسیر سیستم (جایگزین مرحله‌ی nano) |
+| [`install-autopwn-ng.sh`](install-autopwn-ng.sh) | نصب مستقل `autopwn-ng` در `/usr/local/bin` با مجوز اجرا |
 | [`examples/run-autopwn-ng.sh`](examples/run-autopwn-ng.sh) | نمونه‌ی فراخوانی‌ها: پیش‌فرض، `stealth`، `brute`، هدف مشخص، بدون فازهای بلند |
 
 ---
