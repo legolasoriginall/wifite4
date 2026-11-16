@@ -214,18 +214,29 @@ fi
 command -v mdk4 >/dev/null || warn "mdk4 نصب نیست؛ دِاوث ضعیف‌تر می‌شود."
 
 # ---------- پاکسازی ----------
+_CLEANED=0
 cleanup(){
+  [ "$_CLEANED" = 1 ] && return
+  _CLEANED=1
   [ -n "${HK_PID:-}" ] && { kill "$HK_PID" 2>/dev/null; wait "$HK_PID" 2>/dev/null; }
   [ -n "${MDK_PID:-}" ] && { kill "$MDK_PID" 2>/dev/null; wait "$MDK_PID" 2>/dev/null; }
+  [ -n "${SCAN_PID:-}" ] && { kill "$SCAN_PID" 2>/dev/null; wait "$SCAN_PID" 2>/dev/null; }
   [ -n "${TWIN_PID:-}" ] && { kill "$TWIN_PID" 2>/dev/null; wait "$TWIN_PID" 2>/dev/null; }
+  if [ -n "${KISMET_RAN:-}" ]; then pkill -f 'kismet -c' 2>/dev/null || true; fi
   [ -n "${MON:-}" ] && airmon-ng stop "$MON" >/dev/null 2>&1
+  # revert macchanger if applied
+  if [ -n "${ORIG_MAC:-}" ] && [ -n "${MON:-}" ]; then
+    ip link set "$MON" down 2>/dev/null
+    ip link set "$MON" address "$ORIG_MAC" 2>/dev/null
+    ip link set "$MON" up 2>/dev/null
+  fi
   for i in "$IFACE" "$IFACE2"; do [ -n "$i" ] && ip link set "$i" up 2>/dev/null; done
   systemctl restart NetworkManager >/dev/null 2>&1 || true
-  hr; c "خروجی‌ها: $WORK"
+  hr; c "خروجی‌ها: ${WORK:-}"
 }
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
 
 # ---------- فاز ۰: آماده‌سازی ----------
 hr; c "فاز ۰ — آماده‌سازی"
@@ -264,6 +275,7 @@ ok "مانیتور مود: $MON"
 
 # MAC رندوم برای مخفی‌کاری در حالت stealth
 if [ "$PROFILE" = stealth ]; then
+  ORIG_MAC=$(ip link show "$MON" 2>/dev/null | awk '/link\/ether/{print $2; exit}')
   ip link set "$MON" down
   macchanger -r "$MON" >/dev/null 2>&1 || true
   ip link set "$MON" up
@@ -273,6 +285,7 @@ fi
 # ---------- فاز ۰.۵: شناسایی منفعل (kismet) ----------
 if [ "$SKIP_TO" -le 1 ] && command -v kismet >/dev/null; then
   hr; c "فاز ۰.۵ — شناسایی منفعل با kismet"
+  KISMET_RAN=1
   timeout 30 kismet -c "$MON" >/dev/null 2>&1 || true
   ok "شناسایی منفعل کامل شد."
   save_checkpoint 1
