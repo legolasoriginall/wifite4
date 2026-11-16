@@ -643,7 +643,6 @@ if [ "$SKIP_TO" -le 7 ] && [ "$DO_HARVEST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]
   else
     warn "هیچ اعتبارنامهٔ HTTP در ترافیک یافت نشد."
   fi
-  save_checkpoint 7
 fi
 
 # ---------- گزارش ----------
