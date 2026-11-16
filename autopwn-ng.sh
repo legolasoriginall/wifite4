@@ -11,6 +11,7 @@ export LC_ALL=C
 
 PROFILE=normal
 CAPTURE=120
+CAPTURE_EXPLICIT=0
 IFACE=""
 IFACE2=""
 DICTDIR="/opt/wordlists"
@@ -38,7 +39,7 @@ hr(){ printf '\033[1;35m%s\033[0m\n' "──────────────
 while [ $# -gt 0 ]; do
   case "$1" in
     -p) PROFILE="$2"; shift 2;;
-    -t) CAPTURE="$2"; shift 2;;
+    -t) CAPTURE="$2"; CAPTURE_EXPLICIT=1; shift 2;;
     -i) IFACE="$2"; shift 2;;
     -I) IFACE2="$2"; shift 2;;
     -w) WORDLIST="$2"; shift 2;;
@@ -55,8 +56,12 @@ while [ $# -gt 0 ]; do
 done
 
 case "$PROFILE" in
-  stealth) CAPTURE=${CAPTURE:-240}; WLIMIT=1;;
-  brute)   CAPTURE=${CAPTURE:-420}; WLIMIT=3;;
+  stealth)
+    if [[ "$CAPTURE_EXPLICIT" -eq 0 ]]; then CAPTURE=240; fi
+    WLIMIT=1;;
+  brute)
+    if [[ "$CAPTURE_EXPLICIT" -eq 0 ]]; then CAPTURE=420; fi
+    WLIMIT=3;;
 esac
 
 # حالت خودکار: یک کلیک → اسکن، انتخاب بهترین هدف، کرک، گزارش
