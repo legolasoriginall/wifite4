@@ -79,9 +79,6 @@ esac
 if [ "$AUTO" -eq 1 ]; then
   PROFILE=normal
   CAPTURE=90
-  DO_WPS=1
-  DO_TWIN=1
-  DO_POST=1
   ok "حالت خودکار: اسکن + انتخاب هدف + کرک + گزارش"
 fi
 

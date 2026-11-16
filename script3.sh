@@ -96,7 +96,7 @@ while true; do
       read -rp "مدت برداشت به ثانیه (پیش‌فرض 90): " t
       t="${t:-90}"
       say "اجرای بدون فازهای بلند (no-twin, no-post, t=$t)..."
-      autopwn-ng -i "$IFACE" --no-twin --no-post -t "$t"
+      run_ap --no-twin --no-post -t "$t"
       ;;
     4)
       say "شبیه‌سازی (بدون ابزار و تغییر روی سیستم)..."
