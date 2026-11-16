@@ -52,6 +52,7 @@ show_menu() {
   printf '%s║  4) هدف مشخص (target BSSID)           ║%s\n' "$c_info" "$c_reset"
   printf '%s║  5) بدون فازهای بلند (no-twin/no-post)║%s\n' "$c_info" "$c_reset"
   printf '%s║  6) dry-run / simulate                ║%s\n' "$c_info" "$c_reset"
+  printf '%s║  7) یک کلیک (auto) — اسکن+کرک+گزارش  ║%s\n' "$c_ok" "$c_reset"
   printf '%s║  0) خروج                              ║%s\n' "$c_warn" "$c_reset"
   printf '%s╚══════════════════════════════════════╝%s\n' "$c_bold" "$c_reset"
   echo
@@ -73,7 +74,7 @@ read_iface() {
 # ---------------------------------------------------------------- main loop
 while true; do
   show_menu
-  read -rp "انتخاب کنید [0-6]: " choice
+  read -rp "انتخاب کنید [0-7]: " choice
 
   case "$choice" in
     1)
@@ -120,6 +121,15 @@ while true; do
     6)
       say "شبیه‌سازی (بدون ابزار و تغییر روی سیستم)..."
       sudo autopwn-ng --dry-run
+      ;;
+    7)
+      read_iface
+      say "حالت یک کلیک (auto): اسکن + انتخاب هدف + کرک + گزارش..."
+      if [[ -n "$IFACE2" ]]; then
+        sudo autopwn-ng -i "$IFACE" -I "$IFACE2" --auto
+      else
+        sudo autopwn-ng -i "$IFACE" --auto
+      fi
       ;;
     0)
       say "خروج."

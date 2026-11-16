@@ -3,6 +3,7 @@
 #  autopwn-ng — زنجیره کامل تست نفوذ وای‌فای
 #  استفاده: sudo autopwn-ng [-p profile] [-t seconds] [-i iface] [-w wordlist]
 #           [-d dictdir] [--no-wps] [--no-twin] [--no-post] [--target BSSID]
+#           [--auto] [--dry-run|--simulate]
 #  پروفایل: stealth | normal | brute
 # ==========================================================================
 set -uo pipefail
@@ -19,6 +20,7 @@ DO_TWIN=1
 DO_POST=1
 TARGET=""
 DRY_RUN=0
+AUTO=0
 WLIMIT=3
 WORK="$(mktemp -d /tmp/autopwn.XXXXXX)"
 POT="$WORK/hashcat.pot"
@@ -46,6 +48,7 @@ while [ $# -gt 0 ]; do
     --no-twin) DO_TWIN=0; shift;;
     --no-post) DO_POST=0; shift;;
     --dry-run|--simulate) DRY_RUN=1; shift;;
+    --auto) AUTO=1; shift;;
     -h|--help) sed -n '2,8p' "$0"; exit 0;;
     *) err "گزینه ناشناس: $1"; exit 1;;
   esac
@@ -56,11 +59,22 @@ case "$PROFILE" in
   brute)   CAPTURE=${CAPTURE:-420}; WLIMIT=3;;
 esac
 
+# حالت خودکار: یک کلیک → اسکن، انتخاب بهترین هدف، کرک، گزارش
+if [ "$AUTO" -eq 1 ]; then
+  PROFILE=normal
+  CAPTURE=90
+  DO_WPS=1
+  DO_TWIN=1
+  DO_POST=1
+  ok "حالت خودکار: اسکن + انتخاب هدف + کرک + گزارش"
+fi
+
 [ "$DRY_RUN" = 1 ] && {
   echo "SIMULATION MODE: autopwn-ng dry-run / --simulate"
   echo
   echo "Profile: $PROFILE"
   echo "Capture: ${CAPTURE:-120}s"
+  [ "$AUTO" -eq 1 ] && echo "Mode: auto (one-click)"
   echo
   echo "Phases (simulation only - no tools will run)"
   echo "  [0] Setup: check root, prerequisites, wireless interfaces"
