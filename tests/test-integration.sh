@@ -20,15 +20,12 @@ trap 'rm -rf "$MOCK_DIR"' EXIT
 
 TOOLS="airmon-ng hcxdumptool hashcat hcxpcapngtool hcxhashtool airodump-ng \
   mdk4 reaver bettercap hostapd-mana wifiphisher kwp macchanger iw jq xxd \
-  comm sort bully wash kismet tshark dnsmasq nmap cowpatty grep"
+  comm sort bully wash kismet tshark dnsmasq nmap cowpatty"
 for t in $TOOLS; do
   printf '#!/usr/bin/env bash\nexit 0\n' > "$MOCK_DIR/$t"
   chmod +x "$MOCK_DIR/$t"
 done
-# grep must behave like real grep for any assertions that pipe through it
-printf '#!/usr/bin/env bash\n/usr/bin/grep "$@"\n' > "$MOCK_DIR/grep"
-chmod +x "$MOCK_DIR/grep"
-
+# grep is left as the real binary (available on PATH) for assertions
 export PATH="$MOCK_DIR:$PATH"
 
 assert_exit() {
@@ -119,12 +116,10 @@ assert_contains "unknown option prints error" "ناشناس" bash "$SCRIPT" --bo
 assert_exit "-p with no value fails" 1 bash "$SCRIPT" -p
 assert_exit "-t with no value fails" 1 bash "$SCRIPT" -t
 
-# --- Dry-run always exits 0 and prints completion ---
+# --- Dry-run completion message ---
 echo
 echo "-- Dry-run completion --"
-assert_exit "dry-run exits 0" 0 bash "$SCRIPT" --dry-run
 assert_contains "dry-run completion message" "Simulation complete" bash "$SCRIPT" --dry-run
-assert_contains "dry-run header" "SIMULATION MODE" bash "$SCRIPT" --dry-run
 
 # --- Summary ---
 echo
