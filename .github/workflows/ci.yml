@@ -45,6 +45,12 @@ jobs:
           echo "OK: autopwn-ng.sh -p stealth -t 300 --dry-run"
           bash autopwn-ng.sh --resume --dry-run >/dev/null
           echo "OK: autopwn-ng.sh --resume --dry-run"
+          bash autopwn-ng.sh --auto --dry-run >/dev/null
+          echo "OK: autopwn-ng.sh --auto --dry-run"
+          bash autopwn-ng.sh --no-harvest --dry-run >/dev/null
+          echo "OK: autopwn-ng.sh --no-harvest --dry-run"
+          bash autopwn-ng.sh --harvest-time 10 --dry-run >/dev/null
+          echo "OK: autopwn-ng.sh --harvest-time 10 --dry-run"
           bash autopwn-ng.sh --help >/dev/null
           echo "OK: autopwn-ng.sh --help"
           bash setup.sh --help >/dev/null
