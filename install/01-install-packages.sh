@@ -11,10 +11,10 @@ command -v apt-get >/dev/null 2>&1 || die "apt-get پیدا نشد. این اس�
 
 # ---------------------------------------------------------------- install
 # apt-get update may fail on transient network issues; warn but continue
-sudo apt-get update || echo "[!] apt-get update had issues, continuing..." >&2
+apt-get update || echo "[!] apt-get update had issues, continuing..." >&2
 
 # apt-get install is idempotent: already-installed packages are skipped
-sudo apt-get install -y --no-install-recommends \
+apt-get install -y --no-install-recommends \
   aircrack-ng hcxtools hcxdumptool hashcat reaver mdk4 \
   bettercap iw xxd jq \
   bully wash kismet tshark dnsmasq nmap cowpatty \

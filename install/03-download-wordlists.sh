@@ -14,7 +14,7 @@ command -v wget >/dev/null 2>&1 || die "wget پیدا نشد: sudo apt-get insta
 
 # ---------------------------------------------------------------- download
 WORDLIST_DIR=/opt/wordlists
-sudo mkdir -p "$WORDLIST_DIR"
+mkdir -p "$WORDLIST_DIR"
 
 # rockyou
 [ -f "$WORDLIST_DIR/rockyou.txt" ] || \
@@ -32,8 +32,8 @@ clone_or_replace "$WORDLIST_DIR/Probable-Wordlists" \
 # rule های تهاجمی
 clone_or_replace "$WORDLIST_DIR/password_cracking_rules" \
   https://github.com/NotSoSecure/password_cracking_rules
-sudo mkdir -p /usr/share/hashcat/rules
-sudo install -m 644 \
+mkdir -p /usr/share/hashcat/rules
+install -m 644 \
   "$WORDLIST_DIR/password_cracking_rules/OneRuleToRuleThemAll.rule" \
   /usr/share/hashcat/rules/
 
@@ -41,8 +41,8 @@ sudo install -m 644 \
 clone_or_replace "$WORDLIST_DIR/kwprocessor" \
   https://github.com/hashcat/kwprocessor
 make -C "$WORDLIST_DIR/kwprocessor" -j"$(nproc)"
-sudo install -m 755 "$WORDLIST_DIR/kwprocessor/kwp" /usr/local/bin/kwp
-sudo install -m 644 \
+install -m 755 "$WORDLIST_DIR/kwprocessor/kwp" /usr/local/bin/kwp
+install -m 644 \
   "$WORDLIST_DIR/kwprocessor/keyboard-base.txt" \
   "$WORDLIST_DIR/kwprocessor/keyboard-rules.txt" \
   "$WORDLIST_DIR/"

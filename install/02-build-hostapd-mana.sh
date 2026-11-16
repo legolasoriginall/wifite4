@@ -13,7 +13,7 @@ command -v gcc >/dev/null 2>&1 || die "gcc پیدا نشد."
 (( EUID == 0 )) || die "به root نیاز دارد: sudo bash install/02-build-hostapd-mana.sh"
 
 # ---------------------------------------------------------------- install deps + build
-sudo apt-get install -y --no-install-recommends \
+apt-get install -y --no-install-recommends \
   libssl-dev libnl-3-dev libnl-genl-3-dev pkg-config make gcc \
   || die "نصب پیش‌نیازهای کامپایل ناموفق بود."
 
@@ -25,4 +25,4 @@ HOSTAPD_DIR=/opt/hostapd-mana
 clone_or_replace "$HOSTAPD_DIR" https://github.com/sensepost/hostapd-mana
 
 make -C "$HOSTAPD_DIR/hostapd" -j"$(nproc)"
-sudo install -m 755 "$HOSTAPD_DIR/hostapd/hostapd" /usr/local/bin/hostapd-mana
+install -m 755 "$HOSTAPD_DIR/hostapd/hostapd" /usr/local/bin/hostapd-mana
