@@ -8,7 +8,14 @@ set -uo pipefail
 
 # Re-exec as root in a user namespace if not already root (for install scripts that require root)
 if (( EUID != 0 )); then
-  exec unshare -U -r bash "$0" "$@"
+  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    exec sudo -E bash "$0" "$@"
+  elif command -v unshare >/dev/null 2>&1 && unshare -U -r true 2>/dev/null; then
+    exec unshare -U -r bash "$0" "$@"
+  else
+    echo "SKIP: root access unavailable (need sudo or user namespaces); cannot run install tests." >&2
+    exit 0
+  fi
 fi
 
 PASS=0
