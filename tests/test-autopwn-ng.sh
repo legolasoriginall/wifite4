@@ -83,6 +83,13 @@ assert_exit "--auto --dry-run exits 0" 0 bash "$SCRIPT" --auto --dry-run
 assert_output_contains "--auto sets capture 90s" "Capture: 90s" bash "$SCRIPT" --auto --dry-run
 assert_output_contains "--auto prints auto mode" "Mode: auto" bash "$SCRIPT" --auto --dry-run
 
+# --- Resume mode ---
+echo
+echo "-- Resume mode --"
+assert_exit "--resume --dry-run exits 0" 0 bash "$SCRIPT" --resume --dry-run
+assert_output_contains "--resume (no checkpoint) prints warning" "checkpoint" bash "$SCRIPT" --resume --dry-run
+assert_output_contains "--resume --dry-run prints simulation header" "SIMULATION MODE" bash "$SCRIPT" --resume --dry-run
+
 # --- Unknown option ---
 echo
 echo "-- Error handling --"

