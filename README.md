@@ -11,6 +11,7 @@
 | مسیر | توضیح |
 |---|---|
 | [`autopwn-ng.sh`](autopwn-ng.sh) | خودِ ابزار: زنجیره‌ی کامل برداشت → کرک → evil twin → post-exploit و تولید گزارش |
+| [`setup.sh`](setup.sh) | نصب خودکار همه‌ی مراحل به ترتیب، با بررسی پیش‌نیازها (root، اینترنت، `git`/`wget`، فضای دیسک، اینترفیس وای‌فای) |
 | [`install/01-install-packages.sh`](install/01-install-packages.sh) | نصب بسته‌های پایه: `aircrack-ng`، `hcxtools`، `hcxdumptool`، `hashcat`، `reaver`، `mdk4`، `kismet`، `bettercap` و… |
 | [`install/02-build-hostapd-mana.sh`](install/02-build-hostapd-mana.sh) | نصب پیش‌نیازهای کامپایل و ساخت `hostapd-mana` و نصب آن در `/usr/local/bin` |
 | [`install/03-download-wordlists.sh`](install/03-download-wordlists.sh) | دانلود `rockyou`، `SecLists`، `Probable-Wordlists`، ruleهای تهاجمی و ساخت `kwp` در `/opt/wordlists` |
@@ -28,12 +29,23 @@
 
 ## نصب
 
+یک دستور، همه‌ی مراحل به ترتیب:
+
+```bash
+sudo bash setup.sh                  # نصب کامل، شامل دانلود وردلیست‌ها
+sudo bash setup.sh --no-wordlists   # بدون مرحله‌ی دانلود وردلیست‌ها
+bash setup.sh --dry-run             # فقط بررسی پیش‌نیازها و نمایش مراحل، بدون تغییر سیستم
+bash setup.sh --help                # راهنما
+```
+
+`setup.sh` پیش از هر کاری root، وجود `apt-get`، دسترسی به اینترنت، `git`/`wget`/`curl`، فضای دیسک و تعداد اینترفیس‌های وای‌فای را بررسی می‌کند، ابزارهای پایه‌ی جاافتاده را نصب می‌کند و در صورت شکست هر مرحله متوقف می‌شود. گزارش اجرا در `/var/log/wifite4-setup.log` ذخیره می‌شود.
+
+اجرای مرحله‌به‌مرحله (اگر ترتیب دستی می‌خواهی):
+
 ```bash
 sudo bash install/01-install-packages.sh
 sudo bash install/02-build-hostapd-mana.sh
 sudo bash install/03-download-wordlists.sh
-
-# نصب ابزار در مسیر سیستم با مجوز اجرا
 sudo bash install/04-install-autopwn-ng.sh
 ```
 
