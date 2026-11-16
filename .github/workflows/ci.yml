@@ -47,6 +47,8 @@ jobs:
           echo "OK: autopwn-ng.sh --resume --dry-run"
           bash autopwn-ng.sh --auto --dry-run >/dev/null
           echo "OK: autopwn-ng.sh --auto --dry-run"
+          bash autopwn-ng.sh --pmkid-only --dry-run >/dev/null
+          echo "OK: autopwn-ng.sh --pmkid-only --dry-run"
           bash autopwn-ng.sh --no-harvest --dry-run >/dev/null
           echo "OK: autopwn-ng.sh --no-harvest --dry-run"
           bash autopwn-ng.sh --harvest-time 10 --dry-run >/dev/null

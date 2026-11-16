@@ -95,6 +95,7 @@ sudo autopwn-ng -i wlan1 -I wlan2       # اجرای کامل
 sudo autopwn-ng --dry-run               # شبیه‌سازی بدون ابزار
 sudo autopwn-ng --simulate              # همان --dry-run
 sudo autopwn-ng --auto                 # یک کلیک: اسکن + برداشت از همه + کرک + گزارش
+sudo autopwn-ng --pmkid-only           # برداشت کوتاه PMKID (۱۵s)؛ در صورت یافتن مستقیم به کرک
 ```
 
 ### روش ۴: حذف (uninstall)

