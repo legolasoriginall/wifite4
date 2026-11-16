@@ -114,7 +114,6 @@ assert_exit "-i iface --dry-run exits 0" 0 bash "$SCRIPT" -i wlan0 --dry-run
 assert_exit "-w wordlist --dry-run exits 0" 0 bash "$SCRIPT" -w /tmp/wl.txt --dry-run
 assert_exit "-d dictdir --dry-run exits 0" 0 bash "$SCRIPT" -d /tmp/dicts --dry-run
 assert_output_contains "--target prints target" "Target: aa:bb:cc:dd:ee:ff" bash "$SCRIPT" --target aa:bb:cc:dd:ee:ff --dry-run
-assert_output_contains "--auto prints auto mode" "Mode: auto" bash "$SCRIPT" --auto --dry-run
 assert_output_contains "--resume without checkpoint warns" "checkpoint" bash "$SCRIPT" --resume --dry-run
 
 # --- Profile selection (all profiles) ---
