@@ -207,17 +207,7 @@ else
   warn "مرحله‌ی وردلیست‌ها رد شد (--no-wordlists)."
 fi
 
-say "── نصب autopwn-ng در /usr/local/bin ──"
-SRC="$REPO_DIR/autopwn-ng.sh"
-DEST="/usr/local/bin/autopwn-ng"
-if (( DRY_RUN == 1 )); then
-  warn "dry-run: install -m 755 $SRC $DEST"
-else
-  [[ -f "$SRC" ]] || die "autopwn-ng.sh پیدا نشد: $SRC"
-  bash -n "$SRC" || die "خطای سینتکس در $SRC"
-  install -m 755 "$SRC" "$DEST"
-  ok "autopwn-ng نصب شد: $DEST"
-fi
+run_step "install-autopwn-ng.sh" "نصب autopwn-ng در /usr/local/bin"
 verify_install
 
 ELAPSED=$((SECONDS - START_TS))
