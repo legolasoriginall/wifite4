@@ -32,7 +32,7 @@ fi
 # ---------------------------------------------------------------- check autopwn-ng
 if ! command -v autopwn-ng >/dev/null 2>&1; then
   err "autopwn-ng در PATH پیدا نشد. ابتدا نصب کنید:"
-  echo "  sudo bash install/04-install-autopwn-ng.sh"
+  echo "  sudo bash setup.sh  # یا: sudo install -m 755 autopwn-ng.sh /usr/local/bin/autopwn-ng"
   exit 1
 fi
 

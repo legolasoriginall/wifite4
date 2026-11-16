@@ -11,13 +11,11 @@
 | مسیر | توضیح |
 |---|---|
 | [`autopwn-ng.sh`](autopwn-ng.sh) | خودِ ابزار: زنجیره‌ی کامل برداشت → کرک → evil twin → post-exploit و تولید گزارش |
-| [`setup.sh`](setup.sh) | نصب خودکار همه‌ی مراحل به ترتیب، با بررسی پیش‌نیازها (root، اینترنت، `git`/`wget`، فضای دیسک، اینترفیس وای‌فای) |
-| [`install-all.sh`](install-all.sh) | نصب سریع: بسته‌ها + hostapd-mana + autopwn-ng + chmod +x (بدون وردلیست‌ها) |
+| [`setup.sh`](setup.sh) | نصب خودکار همه‌ی مراحل به ترتیب، با بررسی پیش‌نیازها (root، اینترنت، `git`/`wget`، فضای دیسک، اینترفیس وای‌فای). گزینهٔ `--no-wordlists` برای نصب سریع بدون وردلیست‌ها |
 | [`uninstall.sh`](uninstall.sh) | حذف کامل: binaries، directories، rules |
 | [`install/01-install-packages.sh`](install/01-install-packages.sh) | نصب بسته‌های پایه: `aircrack-ng`، `hcxtools`، `hcxdumptool`، `hashcat`، `reaver`، `mdk4`، `bettercap`، `iw`، `xxd`، `jq`، `bully`، `wash`، `kismet`، `tshark`، `dnsmasq`، `nmap`، `cowpatty` |
 | [`install/02-build-hostapd-mana.sh`](install/02-build-hostapd-mana.sh) | نصب پیش‌نیازهای کامپایل و ساخت `hostapd-mana` و نصب آن در `/usr/local/bin` |
 | [`install/03-download-wordlists.sh`](install/03-download-wordlists.sh) | دانلود `rockyou`، `SecLists`، `Probable-Wordlists`، ruleهای تهاجمی و ساخت `kwp` در `/opt/wordlists` |
-| [`install/04-install-autopwn-ng.sh`](install/04-install-autopwn-ng.sh) | نصب `autopwn-ng` در `/usr/local/bin/autopwn-ng` با مجوز اجرا (`755`) و بررسی سینتکس پیش از نصب |
 | [`examples/run-autopwn-ng.sh`](examples/run-autopwn-ng.sh) | نمونه‌ی فراخوانی‌ها: پیش‌فرض، `stealth`، `brute`، هدف مشخص، بدون فازهای بلند |
 
 ---
@@ -48,27 +46,26 @@ bash setup.sh --help                # راهنما
 sudo bash install/01-install-packages.sh
 sudo bash install/02-build-hostapd-mana.sh
 sudo bash install/03-download-wordlists.sh
-sudo bash install/04-install-autopwn-ng.sh
+sudo install -m 755 autopwn-ng.sh /usr/local/bin/autopwn-ng
 ```
 
 ## چک‌لیست ترتیب اجرای اسکریپت‌ها
 
 <|start|> فایل | توضیح |
 |------|--------|
-| [`install-all.sh`](install-all.sh) | نصب سریع: بسته‌ها + hostapd-mana + autopwn-ng + chmod +x (بدون وردلیست‌ها) |
-| [`setup.sh`](setup.sh) | نصب کامل: همه مراحل + بررسی پیش‌نیازها + وردلیست‌ها |
+| [`setup.sh`](setup.sh) | نصب خودکار (کامل یا سریع با `--no-wordlists`) + بررسی پیش‌نیازها |
 | [`uninstall.sh`](uninstall.sh) | حذف کامل: binaries + directories + rules |
 
 ### روش ۱: نصب خودکار (توصیه‌شده)
 
 ```bash
-# ۱. بررسی پیش‌نیازها + نصب همه‌چیز به ترتیب
+# ۱. بررسی پیش‌نیازها + نصب همه‌چیز به ترتیب (شامل وردلیست‌ها)
 sudo bash setup.sh
 
 # ۲. (اختیاری) فقط بررسی بدون تغییر
 bash setup.sh --dry-run
 
-# ۳. (اختیاری) بدون دانلود وردلیست‌ها
+# ۳. (اختیاری) نصب سریع بدون دانلود وردلیست‌ها
 sudo bash setup.sh --no-wordlists
 ```
 
@@ -85,7 +82,7 @@ sudo bash install/02-build-hostapd-mana.sh
 sudo bash install/03-download-wordlists.sh
 
 # مرحله ۴ — نصب autopwn-ng در /usr/local/bin
-sudo bash install/04-install-autopwn-ng.sh
+sudo install -m 755 autopwn-ng.sh /usr/local/bin/autopwn-ng
 ```
 
 ### روش ۳: اجرای autopwn-ng

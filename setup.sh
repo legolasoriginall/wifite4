@@ -33,11 +33,16 @@ usage() {
   bash setup.sh --dry-run            فقط بررسی پیش‌نیازها و نمایش مراحل
   bash setup.sh --help               همین راهنما
 
+گزینه‌ها:
+  --no-wordlists   بدون مرحله‌ی دانلود وردلیست‌ها (سریع‌تر)
+  --dry-run        فقط بررسی پیش‌نیازها و نمایش مراحل
+  --help           همین راهنما
+
 مراحل:
   1) install/01-install-packages.sh      بسته‌های پایه
   2) install/02-build-hostapd-mana.sh    ساخت و نصب hostapd-mana
-  3) install/03-download-wordlists.sh    دانلود وردلیست‌ها، ruleها و ساخت kwp
-  4) install/04-install-autopwn-ng.sh    نصب autopwn-ng در /usr/local/bin
+  3) install/03-download-wordlists.sh    دانلود وردلیست‌ها، ruleها و ساخت kwp (با --no-wordlists رد می‌شود)
+  4) نصب autopwn-ng در /usr/local/bin
 
 گزارش اجرا در /var/log/wifite4-setup.log ذخیره می‌شود.
 EOF
@@ -202,7 +207,17 @@ else
   warn "مرحله‌ی وردلیست‌ها رد شد (--no-wordlists)."
 fi
 
-run_step "install/04-install-autopwn-ng.sh" "نصب autopwn-ng در /usr/local/bin"
+say "── نصب autopwn-ng در /usr/local/bin ──"
+SRC="$REPO_DIR/autopwn-ng.sh"
+DEST="/usr/local/bin/autopwn-ng"
+if (( DRY_RUN == 1 )); then
+  warn "dry-run: install -m 755 $SRC $DEST"
+else
+  [[ -f "$SRC" ]] || die "autopwn-ng.sh پیدا نشد: $SRC"
+  bash -n "$SRC" || die "خطای سینتکس در $SRC"
+  install -m 755 "$SRC" "$DEST"
+  ok "autopwn-ng نصب شد: $DEST"
+fi
 verify_install
 
 ELAPSED=$((SECONDS - START_TS))
