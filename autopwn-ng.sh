@@ -124,7 +124,7 @@ CAP="$WORK/capture.pcapng"
 REPORT="$WORK/report"
 mkdir -p "$REPORT"
 
-[ "$DRY_RUN" = 1 ] && {
+print_plan() {
   echo "SIMULATION MODE: autopwn-ng dry-run / --simulate"
   echo
   echo "Profile: $PROFILE"
@@ -203,8 +203,9 @@ PLAN
   echo
   echo "✓ Simulation complete. No changes were made."
   echo
-  exit 0
 }
+
+[ "$DRY_RUN" = 1 ] && { print_plan; exit 0; }
 
 (( EUID == 0 )) || { err "با sudo اجرا کن."; exit 1; }
 if ! command -v hashcat >/dev/null || ! command -v hcxdumptool >/dev/null || ! command -v iw >/dev/null; then
