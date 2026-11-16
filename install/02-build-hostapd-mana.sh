@@ -8,8 +8,6 @@ die() { printf '\033[1;31m[-]\033[0m %s\n' "$*" >&2; exit 1; }
 
 command -v apt-get >/dev/null 2>&1 || die "apt-get پیدا نشد."
 command -v git >/dev/null 2>&1 || die "git پیدا نشد. ابتدا نصب کن: sudo apt-get install -y git"
-command -v make >/dev/null 2>&1 || die "make پیدا نشد."
-command -v gcc >/dev/null 2>&1 || die "gcc پیدا نشد."
 (( EUID == 0 )) || die "به root نیاز دارد: sudo bash install/02-build-hostapd-mana.sh"
 
 # ---------------------------------------------------------------- install deps + build

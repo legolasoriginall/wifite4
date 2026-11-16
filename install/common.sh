@@ -1,7 +1,7 @@
-#!/usr/bin/env bash
+# shellcheck shell=bash
 # ==========================================================================
 #  wifite4 — shared helpers for install scripts
-#  Source this file: source "$(dirname "$0")/common.sh"
+#  Source this file: . "$(dirname "$0")/common.sh"
 # ==========================================================================
 
 # Clone a git repo into dir, or replace it if a previous clone was partial/invalid.

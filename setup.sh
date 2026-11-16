@@ -11,7 +11,6 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/var/log/wifite4-setup.log"
 WITH_WORDLISTS=1
 DRY_RUN=0
-ORIGINAL_ARGS=("$@")
 
 if [[ -t 1 ]]; then
   c_reset=$'\033[0m' c_ok=$'\033[32m' c_warn=$'\033[33m' c_err=$'\033[31m' c_info=$'\033[36m'
@@ -60,7 +59,7 @@ if (( EUID != 0 )); then
     warn "dry-run بدون root اجرا می‌شود؛ نصب واقعی به root نیاز دارد."
   elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
     say "دسترسی root لازم است؛ اجرای مجدد با sudo…"
-    exec sudo -E bash "$0" "${ORIGINAL_ARGS[@]}"
+    exec sudo -E bash "$0" "$@"
   else
     die "این اسکریپت به root نیاز دارد: sudo bash setup.sh"
   fi

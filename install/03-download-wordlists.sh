@@ -6,6 +6,7 @@ die() { printf '\033[1;31m[-]\033[0m %s\n' "$*" >&2; exit 1; }
 
 command -v git >/dev/null 2>&1 || die "git پیدا نشد: sudo apt-get install -y git"
 command -v wget >/dev/null 2>&1 || die "wget پیدا نشد: sudo apt-get install -y wget"
+command -v make >/dev/null 2>&1 || die "make پیدا نشد: sudo apt-get install -y make"
 (( EUID == 0 )) || die "به root نیاز دارد: sudo bash install/03-download-wordlists.sh"
 
 # ---------------------------------------------------------------- shared helpers
