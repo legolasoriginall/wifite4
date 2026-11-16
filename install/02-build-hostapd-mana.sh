@@ -6,8 +6,10 @@ export DEBIAN_FRONTEND=noninteractive
 # shellcheck disable=SC1091
 . "$(dirname "$0")/common.sh"
 
-command -v apt-get >/dev/null || die "apt-get پیدا نشد."
-command -v git >/dev/null || die "git پیدا نشد. ابتدا نصب کن: sudo apt-get install -y git"
+command -v bash   >/dev/null 2>&1 || die "bash پیدا نشد."
+command -v apt-get >/dev/null 2>&1 || die "apt-get پیدا نشد."
+command -v git    >/dev/null 2>&1 || die "git پیدا نشد. ابتدا نصب کن: sudo apt-get install -y git"
+command -v make   >/dev/null 2>&1 || die "make پیدا نشد. ابتدا نصب کن: sudo apt-get install -y make"
 (( EUID == 0 )) || die "به root نیاز دارد: sudo bash install/02-build-hostapd-mana.sh"
 
 # ---------------------------------------------------------------- install deps + build

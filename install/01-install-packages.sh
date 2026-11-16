@@ -6,7 +6,8 @@ export DEBIAN_FRONTEND=noninteractive
 # shellcheck disable=SC1091
 . "$(dirname "$0")/common.sh"
 
-command -v apt-get >/dev/null || die "apt-get پیدا نشد. این اسکریپت فقط روی Debian/Ubuntu/Kali/Parrot کار می‌کند."
+command -v bash   >/dev/null 2>&1 || die "bash پیدا نشد."
+command -v apt-get >/dev/null 2>&1 || die "apt-get پیدا نشد. این اسکریپت فقط روی Debian/Ubuntu/Kali/Parrot کار می‌کند."
 (( EUID == 0 )) || die "به root نیاز دارد: sudo bash install/01-install-packages.sh"
 
 # ---------------------------------------------------------------- install

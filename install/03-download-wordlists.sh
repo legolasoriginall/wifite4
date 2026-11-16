@@ -4,7 +4,8 @@ set -euo pipefail
 # shellcheck disable=SC1091
 . "$(dirname "$0")/common.sh"
 
-command -v git >/dev/null || die "git پیدا نشد: sudo apt-get install -y git"
+command -v bash >/dev/null 2>&1 || die "bash پیدا نشد."
+command -v git  >/dev/null 2>&1 || die "git پیدا نشد: sudo apt-get install -y git"
 command -v wget >/dev/null || die "wget پیدا نشد: sudo apt-get install -y wget"
 command -v make >/dev/null || die "make پیدا نشد: sudo apt-get install -y make"
 (( EUID == 0 )) || die "به root نیاز دارد: sudo bash install/03-download-wordlists.sh"

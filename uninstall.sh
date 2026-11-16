@@ -50,6 +50,11 @@ while (( $# > 0 )); do
   shift
 done
 
+# ---------------------------------------------------------------- prerequisite checks
+command -v rm   >/dev/null 2>&1 || die "rm پیدا نشد."
+command -v tee  >/dev/null 2>&1 || die "tee پیدا نشد."
+command -v mkdir >/dev/null 2>&1 || die "mkdir پیدا نشد."
+
 # ---------------------------------------------------------------- root
 if (( EUID != 0 )); then
   if (( DRY_RUN == 1 )); then
