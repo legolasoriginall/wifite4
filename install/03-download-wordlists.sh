@@ -8,18 +8,13 @@ command -v git >/dev/null 2>&1 || die "git پیدا نشد: sudo apt-get install
 command -v wget >/dev/null 2>&1 || die "wget پیدا نشد: sudo apt-get install -y wget"
 (( EUID == 0 )) || die "به root نیاز دارد: sudo bash install/03-download-wordlists.sh"
 
+# ---------------------------------------------------------------- shared helpers
+# shellcheck source=/dev/null  # resolved at runtime via dirname
+. "$(dirname "$0")/common.sh"
+
 # ---------------------------------------------------------------- download
 WORDLIST_DIR=/opt/wordlists
 sudo mkdir -p "$WORDLIST_DIR"
-
-# Clone a repo, or replace it if a previous clone was partial/invalid
-clone_or_replace() {
-  local dir="$1" url="$2"
-  if [ ! -d "$dir/.git" ]; then
-    rm -rf "$dir"
-    git clone --depth 1 "$url" "$dir"
-  fi
-}
 
 # rockyou
 [ -f "$WORDLIST_DIR/rockyou.txt" ] || \

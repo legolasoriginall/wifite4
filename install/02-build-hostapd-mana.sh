@@ -19,11 +19,10 @@ sudo apt-get install -y --no-install-recommends \
 
 HOSTAPD_DIR=/opt/hostapd-mana
 
-# Skip valid clones; remove and replace partial/invalid ones
-if [ ! -d "$HOSTAPD_DIR/.git" ]; then
-  rm -rf "$HOSTAPD_DIR"
-  git clone --depth 1 https://github.com/sensepost/hostapd-mana "$HOSTAPD_DIR"
-fi
+# shellcheck source=/dev/null  # resolved at runtime via dirname
+. "$(dirname "$0")/common.sh"
+
+clone_or_replace "$HOSTAPD_DIR" https://github.com/sensepost/hostapd-mana
 
 make -C "$HOSTAPD_DIR/hostapd" -j"$(nproc)"
 sudo install -m 755 "$HOSTAPD_DIR/hostapd/hostapd" /usr/local/bin/hostapd-mana
