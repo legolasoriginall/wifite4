@@ -5,18 +5,14 @@
 # ==========================================================================
 set -euo pipefail
 
+# shellcheck disable=SC1091
+. "$(dirname "$0")/install/common.sh"
+
 DRY_RUN=0
 
-if [[ -t 1 ]]; then
-  c_reset=$'\033[0m' c_ok=$'\033[32m' c_warn=$'\033[33m' c_err=$'\033[31m' c_info=$'\033[36m'
-else
-  c_reset='' c_ok='' c_warn='' c_err='' c_info=''
-fi
-
-say()  { printf '%s[*]%s %s\n' "$c_info" "$c_reset" "$*"; }
-ok()   { printf '%s[+]%s %s\n' "$c_ok" "$c_reset" "$*"; }
-warn() { printf '%s[!]%s %s\n' "$c_warn" "$c_reset" "$*"; }
-die()  { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*" >&2; exit 1; }
+say()  { printf '%s[*]%s %s\n' "$_c_info" "$_c_reset" "$*"; }
+ok()   { printf '%s[+]%s %s\n' "$_c_ok" "$_c_reset" "$*"; }
+warn() { printf '%s[!]%s %s\n' "$_c_warn" "$_c_reset" "$*"; }
 
 usage() {
   cat <<'EOF'
@@ -62,6 +58,7 @@ SRC="$REPO_DIR/autopwn-ng.sh"
 DEST="/usr/local/bin/autopwn-ng"
 
 [[ -f "$SRC" ]] || die "فایل منبع پیدا نشد: $SRC"
+[[ -r "$SRC" ]] || die "فایل منبع قابل خواندن نیست: $SRC"
 bash -n "$SRC" || die "خطای سینتکس در $SRC"
 
 # ---------------------------------------------------------------- install
