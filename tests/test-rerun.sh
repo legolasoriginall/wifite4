@@ -4,7 +4,7 @@
 #  Usage: bash tests/test-rerun.sh
 # ==========================================================================
 set -uo pipefail
-# shellcheck disable=SC2034,SC2317
+# shellcheck disable=SC2034,SC2317,SC2329
 
 # Re-exec as root in a user namespace if not already root (for install scripts that require root)
 if (( EUID != 0 )); then
@@ -18,7 +18,7 @@ MOCK_DIR="$(mktemp -d)"
 # Prepend mock dir so mocks override, but keep system tools available
 export PATH="$MOCK_DIR:$PATH"
 
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 cleanup() { rm -rf "$MOCK_DIR"; }
 trap cleanup EXIT
 
