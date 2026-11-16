@@ -82,7 +82,8 @@ check_os() {
 
 check_network() {
   local have_net=0
-  if command -v curl >/dev/null 2>&1 && curl -fsS --max-time 10 -o /dev/null https://github.com 2>/dev/null; then
+  # bash built-in /dev/tcp avoids depending on curl/wget for the preflight
+  if timeout 10 bash -c 'exec 3<>/dev/tcp/github.com/443' 2>/dev/null; then
     have_net=1
   elif command -v wget >/dev/null 2>&1 && wget -q --spider --timeout=10 https://github.com 2>/dev/null; then
     have_net=1
@@ -132,9 +133,11 @@ check_disk() {
 
 check_wifi() {
   local n=0 d
+  shopt -s nullglob
   for d in /sys/class/net/*; do
     if [[ -d "$d/wireless" || -d "$d/phy80211" ]]; then n=$((n + 1)); fi
   done
+  shopt -u nullglob
   if (( n == 0 )); then
     warn "هیچ اینترفیس وای‌فای پیدا نشد؛ نصب ادامه می‌یابد ولی اجرای autopwn-ng به دانگل نیاز دارد."
   elif (( n == 1 )); then

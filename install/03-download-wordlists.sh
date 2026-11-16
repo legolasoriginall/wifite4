@@ -29,7 +29,7 @@ sudo install -m 644 \
 # keyboard walk
 [ -d "$WORDLIST_DIR/kwprocessor" ] || \
   git clone https://github.com/hashcat/kwprocessor "$WORDLIST_DIR/kwprocessor"
-make -C "$WORDLIST_DIR/kwprocessor"
+make -C "$WORDLIST_DIR/kwprocessor" -j"$(nproc)"
 sudo install -m 755 "$WORDLIST_DIR/kwprocessor/kwp" /usr/local/bin/kwp
 sudo install -m 644 \
   "$WORDLIST_DIR/kwprocessor/keyboard-base.txt" \
