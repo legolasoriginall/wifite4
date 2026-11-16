@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 sudo apt install -y libssl-dev libnl-3-dev libnl-genl-3-dev pkg-config make gcc
 git clone https://github.com/sensepost/hostapd-mana
