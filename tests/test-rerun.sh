@@ -159,13 +159,22 @@ else
   fail "setup.sh --dry-run rerun failed"
 fi
 
-# ---------- Test 4: setup.sh --no-wordlists --dry-run ----------
+# ---------- Test 4: setup.sh --quick --dry-run ----------
 echo
-echo "-- setup.sh --no-wordlists --dry-run (quick install) --"
-if bash "$REPO_ROOT/setup.sh" --no-wordlists --dry-run >/dev/null 2>&1; then
-  pass "setup.sh --no-wordlists --dry-run succeeds"
+echo "-- setup.sh --quick --dry-run (quick install) --"
+if bash "$REPO_ROOT/setup.sh" --quick --dry-run >/dev/null 2>&1; then
+  pass "setup.sh --quick --dry-run succeeds"
 else
-  fail "setup.sh --no-wordlists --dry-run failed"
+  fail "setup.sh --quick --dry-run failed"
+fi
+
+# ---------- Test 4b: setup.sh --no-wordlists alias ----------
+echo
+echo "-- setup.sh --no-wordlists --dry-run (legacy alias) --"
+if bash "$REPO_ROOT/setup.sh" --no-wordlists --dry-run >/dev/null 2>&1; then
+  pass "setup.sh --no-wordlists alias succeeds"
+else
+  fail "setup.sh --no-wordlists alias failed"
 fi
 
 # ---------- Test 5: install-autopwn-ng.sh --dry-run ----------

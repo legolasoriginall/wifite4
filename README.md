@@ -11,7 +11,7 @@
 | مسیر | توضیح |
 |---|---|
 | [`autopwn-ng.sh`](autopwn-ng.sh) | خودِ ابزار: زنجیره‌ی کامل برداشت → کرک → evil twin → post-exploit و تولید گزارش |
-| [`setup.sh`](setup.sh) | نصب خودکار همه‌ی مراحل به ترتیب، با بررسی پیش‌نیازها (root، اینترنت، `git`/`wget`، فضای دیسک، اینترفیس وای‌فای). گزینهٔ `--no-wordlists` برای نصب سریع بدون وردلیست‌ها |
+| [`setup.sh`](setup.sh) | نصب خودکار همه‌ی مراحل به ترتیب، با بررسی پیش‌نیازها (root، اینترنت، `git`/`wget`، فضای دیسک، اینترفیس وای‌فای). گزینه‌های `--full` (پیش‌فرض، شامل وردلیست‌ها) و `--quick` (بدون وردلیست‌ها) |
 | [`uninstall.sh`](uninstall.sh) | حذف کامل: binaries، directories، rules |
 | [`install/01-install-packages.sh`](install/01-install-packages.sh) | نصب بسته‌های پایه: `aircrack-ng`، `hcxtools`، `hcxdumptool`، `hashcat`، `reaver`، `mdk4`، `bettercap`، `iw`، `xxd`، `jq`، `bully`، `wash`، `kismet`، `tshark`، `dnsmasq`، `nmap`، `cowpatty` |
 | [`install/02-build-hostapd-mana.sh`](install/02-build-hostapd-mana.sh) | نصب پیش‌نیازهای کامپایل و ساخت `hostapd-mana` و نصب آن در `/usr/local/bin` |
@@ -32,8 +32,9 @@
 یک دستور، همه‌ی مراحل به ترتیب:
 
 ```bash
-sudo bash setup.sh                  # نصب کامل، شامل دانلود وردلیست‌ها
-sudo bash setup.sh --no-wordlists   # بدون مرحله‌ی دانلود وردلیست‌ها
+sudo bash setup.sh                  # نصب کامل (پیش‌فرض، شامل وردلیست‌ها)
+  sudo bash setup.sh --full           # نصب کامل، شامل دانلود وردلیست‌ها
+  sudo bash setup.sh --quick          # بدون مرحله‌ی دانلود وردلیست‌ها
 bash setup.sh --dry-run             # فقط بررسی پیش‌نیازها و نمایش مراحل، بدون تغییر سیستم
 bash setup.sh --help                # راهنما
 ```
@@ -53,7 +54,7 @@ sudo install -m 755 autopwn-ng.sh /usr/local/bin/autopwn-ng
 
 <|start|> فایل | توضیح |
 |------|--------|
-| [`setup.sh`](setup.sh) | نصب خودکار (کامل یا سریع با `--no-wordlists`) + بررسی پیش‌نیازها |
+| [`setup.sh`](setup.sh) | نصب خودکار (کامل با `--full` یا سریع با `--quick`) + بررسی پیش‌نیازها |
 | [`uninstall.sh`](uninstall.sh) | حذف کامل: binaries + directories + rules |
 
 ### روش ۱: نصب خودکار (توصیه‌شده)
@@ -66,7 +67,7 @@ sudo bash setup.sh
 bash setup.sh --dry-run
 
 # ۳. (اختیاری) نصب سریع بدون دانلود وردلیست‌ها
-sudo bash setup.sh --no-wordlists
+sudo bash setup.sh --quick
 ```
 
 ### روش ۲: اجرای مرحله‌به‌مرحله (دستی)

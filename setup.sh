@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==========================================================================
 #  wifite4 — نصب کامل و خودکار
-#  استفاده: sudo bash setup.sh [--no-wordlists] [--dry-run] [--help]
+#  استفاده: sudo bash setup.sh [--full|--quick] [--dry-run] [--help]
 # ==========================================================================
 set -euo pipefail
 
@@ -28,20 +28,23 @@ usage() {
 نصب خودکار و ترتیبی همه‌ی مراحل wifite4.
 
 استفاده:
-  sudo bash setup.sh                 همه‌ی مراحل، از جمله دانلود وردلیست‌ها
-  sudo bash setup.sh --no-wordlists  بدون مرحله‌ی دانلود وردلیست‌ها (سریع‌تر)
+  sudo bash setup.sh                 نصب کامل (پیش‌فرض: شامل وردلیست‌ها)
+  sudo bash setup.sh --full          نصب کامل، شامل دانلود وردلیست‌ها
+  sudo bash setup.sh --quick         نصب سریع، بدون دانلود وردلیست‌ها
   bash setup.sh --dry-run            فقط بررسی پیش‌نیازها و نمایش مراحل
   bash setup.sh --help               همین راهنما
 
 گزینه‌ها:
-  --no-wordlists   بدون مرحله‌ی دانلود وردلیست‌ها (سریع‌تر)
+  --full           شامل دانلود وردلیست‌ها (پیش‌فرض)
+  --quick          بدون دانلود وردلیست‌ها (سریع‌تر)
+  --no-wordlists   نام قدیمی --quick (برای سازگاری پذیرفته می‌شود)
   --dry-run        فقط بررسی پیش‌نیازها و نمایش مراحل
   --help           همین راهنما
 
 مراحل:
   1) install/01-install-packages.sh      بسته‌های پایه
   2) install/02-build-hostapd-mana.sh    ساخت و نصب hostapd-mana
-  3) install/03-download-wordlists.sh    دانلود وردلیست‌ها، ruleها و ساخت kwp (با --no-wordlists رد می‌شود)
+  3) install/03-download-wordlists.sh    دانلود وردلیست‌ها، ruleها و ساخت kwp (با --quick رد می‌شود)
   4) نصب autopwn-ng در /usr/local/bin
 
 گزارش اجرا در /var/log/wifite4-setup.log ذخیره می‌شود.
@@ -50,7 +53,9 @@ EOF
 
 while (( $# > 0 )); do
   case "$1" in
-    --no-wordlists) WITH_WORDLISTS=0 ;;
+    --full)         WITH_WORDLISTS=1 ;;
+    --quick)        WITH_WORDLISTS=0 ;;
+    --no-wordlists) WITH_WORDLISTS=0 ;;  # alias for --quick
     --dry-run)      DRY_RUN=1 ;;
     -h|--help)      usage; exit 0 ;;
     *)              usage >&2; die "گزینه‌ی ناشناخته: $1" ;;
@@ -130,7 +135,7 @@ check_disk() {
     warn "اندازه‌ی فضای دیسک خوانده نشد؛ بررسی فضای آزاد را رد کردم."
   elif (( avail < need_kb )); then
     warn "فضای آزاد $target فقط $((avail / 1024)) مگابایت است؛ وردلیست‌ها حدود ۳ گیگابایت لازم دارند."
-    warn "با --no-wordlists اجرا کن یا فضا آزاد کن."
+    warn "با --quick اجرا کن یا فضا آزاد کن."
   else
     ok "فضای دیسک کافی است ($((avail / 1024 / 1024)) گیگابایت آزاد روی $target)"
   fi
@@ -204,7 +209,7 @@ run_step "install/02-build-hostapd-mana.sh" "ساخت و نصب hostapd-mana"
 if (( WITH_WORDLISTS == 1 )); then
   run_step "install/03-download-wordlists.sh" "دانلود وردلیست‌ها و ساخت kwp"
 else
-  warn "مرحله‌ی وردلیست‌ها رد شد (--no-wordlists)."
+  warn "مرحله‌ی وردلیست‌ها رد شد (--quick)."
 fi
 
 run_step "install-autopwn-ng.sh" "نصب autopwn-ng در /usr/local/bin"
