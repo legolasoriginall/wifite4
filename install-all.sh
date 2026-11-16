@@ -2,7 +2,7 @@
 # ==========================================================================
 #  wifite4 — نصب سریع (بدون وردلیست‌ها)
 #  اجرا: sudo bash install-all.sh [--dry-run] [--help]
-#  مراحل: 01-install-packages → 02-build-hostapd-mana → نصب autopwn-ng + chmod +x
+#  مراحل: 01-install-packages → 02-build-hostapd-mana → نصب autopwn-ng
 # ==========================================================================
 set -euo pipefail
 
@@ -38,7 +38,7 @@ usage() {
 مراحل:
   1) install/01-install-packages.sh      بسته‌های پایه
   2) install/02-build-hostapd-mana.sh    ساخت و نصب hostapd-mana
-  3) نصب autopwn-ng در /usr/local/bin و chmod +x
+  3) نصب autopwn-ng در /usr/local/bin
 EOF
 }
 
@@ -55,7 +55,7 @@ done
 if (( EUID != 0 )); then
   if (( DRY_RUN == 1 )); then
     warn "dry-run بدون root اجرا می‌شود."
-  elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+  elif command -v sudo >/dev/null && sudo -n true 2>/dev/null; then
     say "اجرای مجدد با sudo…"
     exec sudo -E bash "$0" "$@"
   else

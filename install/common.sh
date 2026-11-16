@@ -9,6 +9,6 @@ clone_or_replace() {
   local dir="$1" url="$2"
   if [ ! -d "$dir/.git" ]; then
     rm -rf "$dir"
-    git clone --depth 1 "$url" "$dir"
+    git clone --depth 1 --single-branch "$url" "$dir"
   fi
 }
