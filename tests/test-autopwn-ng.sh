@@ -101,6 +101,30 @@ echo "-- Combined flags --"
 assert_exit "-p stealth -t 300 --dry-run exits 0" 0 bash "$SCRIPT" -p stealth -t 300 --dry-run
 assert_output_contains "combined flags capture 300s" "Capture: 300s" bash "$SCRIPT" -p stealth -t 300 --dry-run
 
+# --- Flag parsing (no-hardware) ---
+echo
+echo "-- Flag parsing --"
+assert_exit "--no-wps --dry-run exits 0" 0 bash "$SCRIPT" --no-wps --dry-run
+assert_exit "--no-twin --dry-run exits 0" 0 bash "$SCRIPT" --no-twin --dry-run
+assert_exit "--no-post --dry-run exits 0" 0 bash "$SCRIPT" --no-post --dry-run
+assert_exit "--no-harvest --dry-run exits 0" 0 bash "$SCRIPT" --no-harvest --dry-run
+assert_exit "--harvest-time 10 --dry-run exits 0" 0 bash "$SCRIPT" --harvest-time 10 --dry-run
+assert_exit "--target BSSID --dry-run exits 0" 0 bash "$SCRIPT" --target aa:bb:cc:dd:ee:ff --dry-run
+assert_exit "-i iface --dry-run exits 0" 0 bash "$SCRIPT" -i wlan0 --dry-run
+assert_exit "-w wordlist --dry-run exits 0" 0 bash "$SCRIPT" -w /tmp/wl.txt --dry-run
+assert_exit "-d dictdir --dry-run exits 0" 0 bash "$SCRIPT" -d /tmp/dicts --dry-run
+assert_output_contains "--target prints target" "Target: aa:bb:cc:dd:ee:ff" bash "$SCRIPT" --target aa:bb:cc:dd:ee:ff --dry-run
+assert_output_contains "--auto prints auto mode" "Mode: auto" bash "$SCRIPT" --auto --dry-run
+assert_output_contains "--resume without checkpoint warns" "checkpoint" bash "$SCRIPT" --resume --dry-run
+
+# --- Profile selection (all profiles) ---
+echo
+echo "-- All profiles --"
+assert_exit "stealth profile exits 0" 0 bash "$SCRIPT" -p stealth --dry-run
+assert_exit "brute profile exits 0" 0 bash "$SCRIPT" -p brute --dry-run
+assert_exit "normal profile exits 0" 0 bash "$SCRIPT" -p normal --dry-run
+assert_exit "unknown profile still exits 0" 0 bash "$SCRIPT" -p bogus --dry-run
+
 # --- Summary ---
 echo
 echo "==============================="
