@@ -20,9 +20,8 @@ err()  { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*"; }
 # ---------------------------------------------------------------- prerequisite checks
 die() { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*" >&2; exit 1; }
 
-command -v bash >/dev/null 2>&1 || die "bash پیدا نشد."
-command -v iw   >/dev/null 2>&1 || die "iw پیدا نشد. ابتدا نصب کن: sudo apt-get install -y iw"
-command -v awk  >/dev/null 2>&1 || die "awk پیدا نشد."
+command -v iw  >/dev/null 2>&1 || die "iw پیدا نشد. ابتدا نصب کن: sudo apt-get install -y iw"
+command -v awk >/dev/null 2>&1 || die "awk پیدا نشد."
 
 # ---------------------------------------------------------------- root check
 if (( EUID != 0 )); then
