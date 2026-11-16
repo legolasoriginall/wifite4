@@ -59,6 +59,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$PROFILE" in
+  normal) ;;  # defaults already set
   stealth)
     if [[ "$CAPTURE_EXPLICIT" -eq 0 ]]; then CAPTURE=240; fi
     WLIMIT=1;;
@@ -85,8 +86,6 @@ save_checkpoint() {
 ' "$WORK"
     printf 'CKPT_PHASE=%d
 ' "$phase"
-    printf 'CKPT_PROFILE=%q
-' "$PROFILE"
   } > "$CHECKPOINT"
 }
 
@@ -470,10 +469,8 @@ if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; th
   done < "$WORK/wps-cands.txt"
 fi
 
-  save_checkpoint 5
-
 # ---------- گزارش کرک ----------
-if [ "$SKIP_TO" -le 4 ]; then
+if [ "$SKIP_TO" -le 5 ]; then
 hr; c "استخراج نتایج"
 hashcat -m 22000 "$HASH" --show --potfile-path "$POT" 2>/dev/null > "$WORK/cracked-raw.txt"
 : > "$WORK/cracked.txt"
@@ -487,6 +484,7 @@ while IFS= read -r line; do
 done < "$WORK/cracked-raw.txt"
 [ -s "$WORK/enterprise-cracked.txt" ] && sed 's/^/ENTERPRISE|/' "$WORK/enterprise-cracked.txt" >> "$WORK/cracked.txt"
 
+  save_checkpoint 5
 fi
 
 # ---------- فاز ۵: Evil Twin ----------
