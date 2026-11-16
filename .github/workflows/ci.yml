@@ -33,7 +33,8 @@ jobs:
           set -euo pipefail
           shopt -s globstar
           for f in **/*.sh; do
-            shellcheck -x "$f" || echo "shellcheck issues in $f"
+            echo "Checking: $f"
+            shellcheck -x "$f"
           done
 
       - name: Mock-mode test — stub aircrack-ng tools and exercise parsing

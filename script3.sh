@@ -9,7 +9,7 @@ set -uo pipefail
 if [[ -t 1 ]]; then
   c_reset=$'\033[0m' c_ok=$'\033[32m' c_warn=$'\033[33m' c_err=$'\033[31m' c_info=$'\033[36m' c_bold=$'\033[1m'
 else
-  c_reset= c_ok= c_warn= c_err= c_info= c_bold=
+  c_reset='' c_ok='' c_warn='' c_err='' c_info='' c_bold=''
 fi
 
 say()  { printf '%s[*]%s %s\n' "$c_info" "$c_reset" "$*"; }
