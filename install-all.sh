@@ -9,7 +9,6 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 DRY_RUN=0
-ORIGINAL_ARGS=("$@")
 
 if [[ -t 1 ]]; then
   c_reset=$'\033[0m' c_ok=$'\033[32m' c_warn=$'\033[33m' c_err=$'\033[31m' c_info=$'\033[36m'
@@ -18,13 +17,6 @@ else
 fi
 
 die() { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*" >&2; exit 1; }
-
-# ---------------------------------------------------------------- prerequisite checks
-command -v bash >/dev/null 2>&1 || die "bash پیدا نشد."
-command -v apt-get >/dev/null 2>&1 || die "apt-get پیدا نشد."
-command -v git >/dev/null 2>&1 || die "git پیدا نشد."
-command -v make >/dev/null 2>&1 || die "make پیدا نشد."
-command -v gcc >/dev/null 2>&1 || die "gcc پیدا نشد."
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$REPO_DIR/install/01-install-packages.sh" ]] || die "install/01-install-packages.sh پیدا نشد."
@@ -66,7 +58,7 @@ if (( EUID != 0 )); then
     warn "dry-run بدون root اجرا می‌شود."
   elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
     say "اجرای مجدد با sudo…"
-    exec sudo -E bash "$0" "${ORIGINAL_ARGS[@]}"
+    exec sudo -E bash "$0" "$@"
   else
     die "به root نیاز دارد: sudo bash install-all.sh"
   fi
@@ -98,13 +90,13 @@ run_step "install/01-install-packages.sh" "نصب بسته‌های پایه"
 # مرحله ۲: ساخت hostapd-mana
 run_step "install/02-build-hostapd-mana.sh" "ساخت و نصب hostapd-mana"
 
-# مرحله ۳: نصب autopwn-ng + chmod +x
-say "── نصب autopwn-ng و مجوز اجرا ──"
+# مرحله ۳: نصب autopwn-ng (install -m 755 شامل +x است)
+say "── نصب autopwn-ng ──"
 SRC="$REPO_DIR/autopwn-ng.sh"
 DEST="/usr/local/bin/autopwn-ng"
 
 if (( DRY_RUN == 1 )); then
-  warn "dry-run: bash -n $SRC && rm -f $DEST && install -m 755 $SRC $DEST"
+  warn "dry-run: install -m 755 $SRC $DEST"
 else
   [[ -f "$SRC" ]] || die "autopwn-ng.sh پیدا نشد: $SRC"
   bash -n "$SRC" || die "خطای سینتکس در $SRC"

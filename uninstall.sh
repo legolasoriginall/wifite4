@@ -7,15 +7,8 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
-# ---------------------------------------------------------------- prerequisite checks
-die() { printf '\033[1;31m[-]\033[0m %s\n' "$*" >&2; exit 1; }
-
-command -v rm >/dev/null 2>&1 || die "rm پیدا نشد."
-command -v bash >/dev/null 2>&1 || die "bash پیدا نشد."
-
 WITH_WORDLISTS=1
 DRY_RUN=0
-ORIGINAL_ARGS=("$@")
 
 if [[ -t 1 ]]; then
   c_reset=$'\033[0m' c_ok=$'\033[32m' c_warn=$'\033[33m' c_err=$'\033[31m' c_info=$'\033[36m'
@@ -66,7 +59,7 @@ if (( EUID != 0 )); then
     warn "dry-run بدون root اجرا می‌شود؛ حذف واقعی به root نیاز دارد."
   elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
     say "دسترسی root لازم است؛ اجرای مجدد با sudo…"
-    exec sudo -E bash "$0" "${ORIGINAL_ARGS[@]}"
+    exec sudo -E bash "$0" "$@"
   else
     die "این اسکریپت به root نیاز دارد: sudo bash uninstall.sh"
   fi
@@ -80,27 +73,13 @@ if (( DRY_RUN == 0 )); then
 fi
 
 # ---------------------------------------------------------------- helpers
-remove_path() {
+remove() {
   local path="$1" desc="$2"
   if [[ -e "$path" || -L "$path" ]]; then
     if (( DRY_RUN == 1 )); then
       warn "dry-run: rm -rf $path  ($desc)"
     else
       rm -rf "$path"
-      ok "حذف شد: $path  ($desc)"
-    fi
-  else
-    say "یافت نشد (رد شد): $path"
-  fi
-}
-
-remove_file() {
-  local path="$1" desc="$2"
-  if [[ -f "$path" || -L "$path" ]]; then
-    if (( DRY_RUN == 1 )); then
-      warn "dry-run: rm -f $path  ($desc)"
-    else
-      rm -f "$path"
       ok "حذف شد: $path  ($desc)"
     fi
   else
@@ -116,9 +95,9 @@ else
 fi
 
 # --- binaries ---
-remove_file "/usr/local/bin/autopwn-ng" "autopwn-ng"
-remove_file "/usr/local/bin/hostapd-mana" "hostapd-mana"
-remove_file "/usr/local/bin/kwp" "kwp"
+remove "/usr/local/bin/autopwn-ng" "autopwn-ng"
+remove "/usr/local/bin/hostapd-mana" "hostapd-mana"
+remove "/usr/local/bin/kwp" "kwp"
 
 # --- directories ---
 remove_path "/opt/hostapd-mana" "hostapd-mana source/build"
@@ -130,9 +109,7 @@ else
 fi
 
 # --- hashcat rules ---
-if [[ -f /usr/share/hashcat/rules/OneRuleToRuleThemAll.rule ]]; then
-  remove_file "/usr/share/hashcat/rules/OneRuleToRuleThemAll.rule" "hashcat rule"
-fi
+remove "/usr/share/hashcat/rules/OneRuleToRuleThemAll.rule" "hashcat rule"
 
 # --- optional: remove apt packages (ask or skip) ---
 say "بسته‌های apt (aircrack-ng, hashcat, …) حذف نمی‌شوند — برای حذف دستی:"

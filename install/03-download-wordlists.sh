@@ -4,9 +4,8 @@ set -euo pipefail
 # ---------------------------------------------------------------- prerequisite checks
 die() { printf '\033[1;31m[-]\033[0m %s\n' "$*" >&2; exit 1; }
 
-command -v git >/dev/null 2>&1 || die "git پیدا نشد. ابتدا نصب کن: sudo apt-get install -y git"
-command -v wget >/dev/null 2>&1 || die "wget پیدا نشد. ابتدا نصب کن: sudo apt-get install -y wget"
-command -v make >/dev/null 2>&1 || die "make پیدا نشد."
+command -v git >/dev/null 2>&1 || die "git پیدا نشد: sudo apt-get install -y git"
+command -v wget >/dev/null 2>&1 || die "wget پیدا نشد: sudo apt-get install -y wget"
 (( EUID == 0 )) || die "به root نیاز دارد: sudo bash install/03-download-wordlists.sh"
 
 # ---------------------------------------------------------------- download
@@ -36,10 +35,9 @@ clone_or_replace "$WORDLIST_DIR/Probable-Wordlists" \
   https://github.com/berzerk0/Probable-Wordlists
 
 # rule های تهاجمی
-if [ ! -f "$WORDLIST_DIR/password_cracking_rules/OneRuleToRuleThemAll.rule" ]; then
-  clone_or_replace "$WORDLIST_DIR/password_cracking_rules" \
-    https://github.com/NotSoSecure/password_cracking_rules
-fi
+clone_or_replace "$WORDLIST_DIR/password_cracking_rules" \
+  https://github.com/NotSoSecure/password_cracking_rules
+sudo mkdir -p /usr/share/hashcat/rules
 sudo install -m 644 \
   "$WORDLIST_DIR/password_cracking_rules/OneRuleToRuleThemAll.rule" \
   /usr/share/hashcat/rules/

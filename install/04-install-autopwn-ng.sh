@@ -8,8 +8,6 @@ SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$SRC_DIR/autopwn-ng.sh"
 DEST="/usr/local/bin/autopwn-ng"
 
-command -v bash >/dev/null 2>&1 || die "bash پیدا نشد."
-command -v install >/dev/null 2>&1 || die "install پیدا نشد."
 (( EUID == 0 )) || die "به root نیاز دارد: sudo bash install/04-install-autopwn-ng.sh"
 [[ -f "$SRC" ]] || die "فایل پیدا نشد: $SRC"
 
