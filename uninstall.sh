@@ -16,7 +16,7 @@ fi
 
 say()  { printf '%s[*]%s %s\n' "$c_info" "$c_reset" "$*"; }
 ok()   { printf '%s[+]%s %s\n' "$c_ok" "$c_reset" "$*"; }
-warn() { printf '%s[!]%s %s\n' "$c_warn" "$c_reset" "$*"; }
+warn() { printf '%s[!]%s %s\n' "$c_warn" "$c_reset" "$*" >&2; }
 die()  { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*" >&2; exit 1; }
 
 usage() {

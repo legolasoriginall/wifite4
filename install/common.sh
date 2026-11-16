@@ -10,7 +10,10 @@ else
   _c_reset='' _c_ok='' _c_warn='' _c_err='' _c_info=''
 fi
 
-die() { printf '%s[-]%s %s\n' "$_c_err" "$_c_reset" "$*" >&2; exit 1; }
+die()  { printf '%s[-]%s %s\n' "$_c_err"   "$_c_reset" "$*" >&2; exit 1; }
+say()  { printf '%s[*]%s %s\n' "$_c_info" "$_c_reset" "$*"; }
+ok()   { printf '%s[+]%s %s\n' "$_c_ok"   "$_c_reset" "$*"; }
+warn() { printf '%s[!]%s %s\n' "$_c_warn" "$_c_reset" "$*" >&2; }
 
 # Clone a git repo into dir, or replace it if a previous clone was partial/invalid.
 clone_or_replace() {

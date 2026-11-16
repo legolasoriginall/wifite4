@@ -20,4 +20,4 @@ apt-get install -y --no-install-recommends \
   bully wash kismet tshark dnsmasq nmap cowpatty \
   || die "نصب بسته‌ها ناموفق بود. خروجی apt-get را بررسی کن."
 
-echo "[+] بسته‌های پایه نصب/به‌روز شدند."
+ok "بسته‌های پایه نصب/به‌روز شدند."

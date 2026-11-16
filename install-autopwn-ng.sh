@@ -10,10 +10,6 @@ set -euo pipefail
 
 DRY_RUN=0
 
-say()  { printf '%s[*]%s %s\n' "$_c_info" "$_c_reset" "$*"; }
-ok()   { printf '%s[+]%s %s\n' "$_c_ok" "$_c_reset" "$*"; }
-warn() { printf '%s[!]%s %s\n' "$_c_warn" "$_c_reset" "$*"; }
-
 usage() {
   cat <<'EOF'
 نصب autopwn-ng در /usr/local/bin/autopwn-ng.
