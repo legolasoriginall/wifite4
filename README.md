@@ -12,10 +12,13 @@
 |---|---|
 | [`autopwn-ng.sh`](autopwn-ng.sh) | خودِ ابزار: زنجیره‌ی کامل برداشت → کرک → evil twin → post-exploit و تولید گزارش |
 | [`setup.sh`](setup.sh) | نصب خودکار همه‌ی مراحل به ترتیب، با بررسی پیش‌نیازها (root، اینترنت، `git`/`wget`، فضای دیسک، اینترفیس وای‌فای) |
+| [`install-all.sh`](install-all.sh) | نصب سریع: بسته‌ها + hostapd-mana + autopwn-ng + chmod +x (بدون وردلیست‌ها) |
+| [`uninstall.sh`](uninstall.sh) | حذف کامل: binaries، directories، rules |
 | [`install/01-install-packages.sh`](install/01-install-packages.sh) | نصب بسته‌های پایه: `aircrack-ng`، `hcxtools`، `hcxdumptool`، `hashcat`، `reaver`، `mdk4`، `bettercap`، `iw`، `pocl-opencl-icd`، `xxd`، `jq` |
 | [`install/02-build-hostapd-mana.sh`](install/02-build-hostapd-mana.sh) | نصب پیش‌نیازهای کامپایل و ساخت `hostapd-mana` و نصب آن در `/usr/local/bin` |
 | [`install/03-download-wordlists.sh`](install/03-download-wordlists.sh) | دانلود `rockyou`، `SecLists`، `Probable-Wordlists`، ruleهای تهاجمی و ساخت `kwp` در `/opt/wordlists` |
 | [`install/04-install-autopwn-ng.sh`](install/04-install-autopwn-ng.sh) | نصب `autopwn-ng` در `/usr/local/bin/autopwn-ng` با مجوز اجرا (`755`) و بررسی سینتکس پیش از نصب |
+| [`install-autopwn-ng.sh`](install-autopwn-ng.sh) | نصب مستقل `autopwn-ng` با `chmod +x` در مسیر سیستم (جایگزین مرحله‌ی nano) |
 | [`examples/run-autopwn-ng.sh`](examples/run-autopwn-ng.sh) | نمونه‌ی فراخوانی‌ها: پیش‌فرض، `stealth`، `brute`، هدف مشخص، بدون فازهای بلند |
 
 ---
@@ -48,6 +51,75 @@ sudo bash install/02-build-hostapd-mana.sh
 sudo bash install/03-download-wordlists.sh
 sudo bash install/04-install-autopwn-ng.sh
 ```
+
+## چک‌لیست ترتیب اجرای اسکریپت‌ها
+
+<|start|> فایل | توضیح |
+|------|--------|
+| [`install-all.sh`](install-all.sh) | نصب سریع: بسته‌ها + hostapd-mana + autopwn-ng + chmod +x (بدون وردلیست‌ها) |
+| [`setup.sh`](setup.sh) | نصب کامل: همه مراحل + بررسی پیش‌نیازها + وردلیست‌ها |
+| [`uninstall.sh`](uninstall.sh) | حذف کامل: binaries + directories + rules |
+
+### روش ۱: نصب خودکار (توصیه‌شده)
+
+```bash
+# ۱. بررسی پیش‌نیازها + نصب همه‌چیز به ترتیب
+sudo bash setup.sh
+
+# ۲. (اختیاری) فقط بررسی بدون تغییر
+bash setup.sh --dry-run
+
+# ۳. (اختیاری) بدون دانلود وردلیست‌ها
+sudo bash setup.sh --no-wordlists
+```
+
+### روش ۲: اجرای مرحله‌به‌مرحله (دستی)
+
+```bash
+# مرحله ۱ — بسته‌های پایه (aircrack-ng, hashcat, hcxtools, ...)
+sudo bash install/01-install-packages.sh
+
+# مرحله ۲ — ساخت و نصب hostapd-mana
+sudo bash install/02-build-hostapd-mana.sh
+
+# مرحله ۳ — دانلود وردلیست‌ها و ساخت kwp
+sudo bash install/03-download-wordlists.sh
+
+# مرحله ۴ — نصب autopwn-ng در /usr/local/bin
+sudo bash install/04-install-autopwn-ng.sh
+```
+
+### روش ۳: اجرای autopwn-ng
+
+```bash
+# پس از نصب کامل:
+sudo autopwn-ng --help                  # راهنما
+sudo autopwn-ng -i wlan1 -I wlan2       # اجرای کامل
+sudo autopwn-ng --dry-run               # شبیه‌سازی بدون ابزار
+sudo autopwn-ng --simulate              # همان --dry-run
+```
+
+### روش ۴: حذف (uninstall)
+
+```bash
+# حذف کامل (autopwn-ng + hostapd-mana + وردلیست‌ها)
+sudo bash uninstall.sh
+
+# حفظ وردلیست‌ها
+sudo bash uninstall.sh --keep-wordlists
+
+# پیش‌نمایش حذف
+bash uninstall.sh --dry-run
+```
+
+### نکات مهم
+
+- **ترتیب نصب مهم است**: بسته‌ها → hostapd-mana → وردلیست‌ها → autopwn-ng
+- **rerun امن**: همه‌ی اسکریپت‌ها idempotent هستند — اگر نصب نیمه‌کاره ماند، `sudo bash setup.sh` را دوباره اجرا کنید
+- **بدون root**: فقط `--dry-run` و `--help` بدون root کار می‌کنند
+- **دو دانگل**: برای فاز evil twin به دو اینترفیس نیاز است؛ با یکی هم کار می‌کند ولی twin غیرفعال می‌شود
+
+---
 
 ## استفاده
 
@@ -97,3 +169,44 @@ sudo autopwn-ng --help
 ## سلب مسئولیت
 
 این ابزار برای تست نفوذ مجاز و آموزش ساخته شده است. استفاده‌ی آن روی شبکه‌هایی که مالکشان نیستی یا اجازه نداری، نقض قوانین است.
+
+## --dry-run و --simulate
+
+هر دو گزینه `--dry-run` و `--simulate` اسکریپت `autopwn-ng.sh` را در حالت شبیه‌سازی (بدون دست‌زدن به رادیو و بدون اجرای ابزارها) اجرا می‌کنند. خروجی هر دو یکسان است و اسکریپت با کد خروج `0` پایان می‌یابد.
+
+```bash
+sudo autopwn-ng --dry-run
+sudo autopwn-ng --simulate
+```
+
+### خروجی نمونه
+
+```text
+SIMULATION MODE: autopwn-ng dry-run / --simulate
+
+Profile: normal
+Capture: 120s
+
+Phases (simulation only - no tools will run)
+  [0] Setup: check root, prerequisites, wireless interfaces
+  [1] Capture: hcxdumptool + mdk4 reassociation (echo only)
+  [2] Extract: hcxpcapngtool + hcxhashtool (echo only)
+  [3] Crack: hashcat layers 1-8 (dicts + masks + rules; echo only)
+  [4] WPS: reaver -K Pixie Dust (if AP has WPS; echo only)
+  [5] Evil Twin: hostapd-mana or wifiphisher (echo only)
+
+✓ Simulation complete. No changes were made.
+```
+
+### ویژگی‌ها
+
+- **بدون تغییر روی سیستم**: هیچ ابزار وای‌فای اجرا نمی‌شود، اینترفیس‌ها تغییر حالت نمی‌دهند و فایلی ساخته/تغییر نمی‌شود.
+- **نمایش برنامهٔ اجرا**: پروفایل انتخاب‌شده، زمان برداشت و فازهای برنامه‌ریزی‌شده (همه به‌صورت `echo only`) چاپ می‌شوند.
+- **مناسب برای تست**: امکان بررسی جریان اجرا و آرگومان‌ها بدون نیاز به دانگل وای‌فای یا دسترسی سخت‌افزاری.
+
+### تفاوت `--dry-run` و `--simulate`
+
+از نظر رفتار تفاوتی ندارند؛ هر دو پرچم `DRY_RUN=1` را تنظیم می‌کنند و پس از چاپ خلاصهٔ شبیه‌سازی خارج می‌شوند. `--dry-run` نام رایج در ابزارهاست و `--simulate` همان مفهوم را با تأکید بر شبیه‌سازی بیان می‌کند.
+```
+
+---
