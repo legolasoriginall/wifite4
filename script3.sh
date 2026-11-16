@@ -24,9 +24,7 @@ command -v iw  >/dev/null 2>&1 || die "iw پیدا نشد. ابتدا نصب ک�
 command -v awk >/dev/null 2>&1 || die "awk پیدا نشد."
 
 # ---------------------------------------------------------------- root check
-if (( EUID != 0 )); then
-  die "این اسکریپت باید با sudo اجرا شود: sudo bash script3.sh"
-fi
+(( EUID == 0 )) || die "این اسکریپت باید با sudo اجرا شود: sudo bash script3.sh"
 
 # ---------------------------------------------------------------- check autopwn-ng
 if ! command -v autopwn-ng >/dev/null 2>&1; then
