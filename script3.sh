@@ -43,7 +43,7 @@ show_menu() {
   printf '%s║  2) هدف مشخص (target BSSID)           ║%s\n' "$c_info" "$c_reset"
   printf '%s║  3) اسکن سریع (no-twin/no-post)       ║%s\n' "$c_info" "$c_reset"
   printf '%s║  4) dry-run / simulate                ║%s\n' "$c_info" "$c_reset"
-  printf '%s║  5) یک کلیک (auto) — اسکن+کرک+گزارش  ║%s\n' "$c_ok" "$c_reset"
+  printf '%s║  5) یک کلیک (auto) — اسکن+برداشت+کرک+گزارش  ║%s\n' "$c_ok" "$c_reset"
   printf '%s║  0) خروج                              ║%s\n' "$c_warn" "$c_reset"
   printf '%s╚══════════════════════════════════════╝%s\n' "$c_bold" "$c_reset"
   echo
@@ -104,7 +104,7 @@ while true; do
       ;;
     5)
       read_iface
-      say "حالت یک کلیک (auto): اسکن + انتخاب هدف + کرک + گزارش..."
+      say "حالت یک کلیک (auto): اسکن + برداشت از همه + کرک + گزارش..."
       run_ap --auto
       ;;
     0)
