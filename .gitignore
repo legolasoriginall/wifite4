@@ -22,7 +22,6 @@ apply_patch2.py
 fix_dry_run_default.py
 full_patch.py
 tmp_patch.py
-*.py
 
 # خروجی‌های نصب (کلون‌ها و ساخت)
 hostapd-mana/

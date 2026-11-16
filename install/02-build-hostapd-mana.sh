@@ -3,8 +3,8 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
-# ---------------------------------------------------------------- prerequisite checks
-die() { printf '\033[1;31m[-]\033[0m %s\n' "$*" >&2; exit 1; }
+# shellcheck disable=SC1091
+. "$(dirname "$0")/common.sh"
 
 command -v apt-get >/dev/null || die "apt-get پیدا نشد."
 command -v git >/dev/null || die "git پیدا نشد. ابتدا نصب کن: sudo apt-get install -y git"
@@ -16,9 +16,6 @@ apt-get install -y --no-install-recommends \
   || die "نصب پیش‌نیازهای کامپایل ناموفق بود."
 
 HOSTAPD_DIR=/opt/hostapd-mana
-
-# shellcheck disable=SC1091  # resolved at runtime via dirname
-. "$(dirname "$0")/common.sh"
 
 clone_or_replace "$HOSTAPD_DIR" https://github.com/sensepost/hostapd-mana
 
