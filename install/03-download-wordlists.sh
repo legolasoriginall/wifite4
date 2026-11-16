@@ -1,21 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-sudo mkdir -p /opt/wordlists && cd /opt/wordlists
+WORDLIST_DIR=/opt/wordlists
+sudo mkdir -p "$WORDLIST_DIR"
 
 # rockyou
-wget -q https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt
+[ -f "$WORDLIST_DIR/rockyou.txt" ] || \
+  wget -q -O "$WORDLIST_DIR/rockyou.txt" \
+    https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt
 
 # SecLists (پسوردهای پیش‌فرض روترها)
-git clone --depth 1 https://github.com/danielmiessler/SecLists
+[ -d "$WORDLIST_DIR/SecLists" ] || \
+  git clone --depth 1 https://github.com/danielmiessler/SecLists "$WORDLIST_DIR/SecLists"
 
 # Probable-Wordlists
-git clone --depth 1 https://github.com/berzerk0/Probable-Wordlists
+[ -d "$WORDLIST_DIR/Probable-Wordlists" ] || \
+  git clone --depth 1 https://github.com/berzerk0/Probable-Wordlists "$WORDLIST_DIR/Probable-Wordlists"
 
 # rule های تهاجمی
-git clone --depth 1 https://github.com/NotSoSecure/password_cracking_rules
-sudo cp password_cracking_rules/OneRuleToRuleThemAll.rule /usr/share/hashcat/rules/
+if [ ! -f "$WORDLIST_DIR/password_cracking_rules/OneRuleToRuleThemAll.rule" ]; then
+  git clone --depth 1 https://github.com/NotSoSecure/password_cracking_rules \
+    "$WORDLIST_DIR/password_cracking_rules"
+fi
+sudo install -m 644 \
+  "$WORDLIST_DIR/password_cracking_rules/OneRuleToRuleThemAll.rule" \
+  /usr/share/hashcat/rules/
 
 # keyboard walk
-git clone https://github.com/hashcat/kwprocessor && cd kwprocessor && make
-sudo cp kwp /usr/local/bin/ && sudo cp keyboard-base.txt keyboard-rules.txt /opt/wordlists/
+[ -d "$WORDLIST_DIR/kwprocessor" ] || \
+  git clone https://github.com/hashcat/kwprocessor "$WORDLIST_DIR/kwprocessor"
+make -C "$WORDLIST_DIR/kwprocessor"
+sudo install -m 755 "$WORDLIST_DIR/kwprocessor/kwp" /usr/local/bin/kwp
+sudo install -m 644 \
+  "$WORDLIST_DIR/kwprocessor/keyboard-base.txt" \
+  "$WORDLIST_DIR/kwprocessor/keyboard-rules.txt" \
+  "$WORDLIST_DIR/"

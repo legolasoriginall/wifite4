@@ -14,3 +14,10 @@ wordlists/
 # ادیتور و سیستم
 *.swp
 .DS_Store
+
+# خروجی‌های نصب (کلون‌ها و ساخت)
+hostapd-mana/
+kwprocessor/
+SecLists/
+Probable-Wordlists/
+password_cracking_rules/
