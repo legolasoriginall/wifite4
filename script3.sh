@@ -20,7 +20,6 @@ err()  { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*"; }
 # ---------------------------------------------------------------- prerequisite checks
 die() { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*" >&2; exit 1; }
 
-command -v bash >/dev/null || die "bash پیدا نشد."
 command -v iw >/dev/null || die "iw پیدا نشد. ابتدا نصب کن: sudo apt-get install -y iw"
 command -v awk >/dev/null || die "awk پیدا نشد."
 

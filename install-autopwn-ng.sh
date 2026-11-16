@@ -35,9 +35,6 @@ while (( $# > 0 )); do
 done
 
 # ---------------------------------------------------------------- prerequisite checks
-command -v bash   >/dev/null 2>&1 || die "bash پیدا نشد."
-command -v chmod  >/dev/null 2>&1 || die "chmod پیدا نشد."
-command -v rm     >/dev/null 2>&1 || die "rm پیدا نشد."
 command -v install >/dev/null 2>&1 || die "install (coreutils) پیدا نشد."
 
 # ---------------------------------------------------------------- root
