@@ -179,6 +179,34 @@ else
 fi
 rm -rf "$ACTIVE_MOCK2"
 
+# --- Offline mode (--from-pcap) ---
+echo
+echo "-- Offline mode (from-pcap) --"
+rm -f /tmp/autopwn-ng.checkpoint
+OFFLINE_MOCK="$(mktemp -d)"
+cat > "$OFFLINE_MOCK/hcxpcapngtool" <<'MOCK'
+#!/usr/bin/env bash
+out=""
+while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -E) shift 2;; --eapmschapv2=*) shift;; *) shift;; esac; done
+mkdir -p "$(dirname "$out")"
+printf 'dummy hash\n' > "$out"
+exit 0
+MOCK
+for t in hcxhashtool aircrack-ng hashcat tshark; do printf '#!/usr/bin/env bash\nexit 0\n' > "$OFFLINE_MOCK/$t" && chmod +x "$OFFLINE_MOCK/$t"; done
+chmod +x "$OFFLINE_MOCK/hcxpcapngtool"
+OFFLINE_PCAP="$(mktemp)"
+printf 'dummy pcap' > "$OFFLINE_PCAP"
+OFFLINE_OUT=$(PATH="$OFFLINE_MOCK:/usr/bin:/bin" bash "$SCRIPT" --from-pcap "$OFFLINE_PCAP" 2>&1)
+OFFLINE_RC=$?
+if [ "$OFFLINE_RC" -eq 0 ] && printf '%s\n' "$OFFLINE_OUT" | grep -qF "فاز ۳"; then
+  echo "  PASS: --from-pcap runs Phase 3 and exits 0"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: --from-pcap (rc=$OFFLINE_RC)"; FAIL=$((FAIL + 1))
+  echo "    output: $(echo "$OFFLINE_OUT" | head -3)"
+fi
+rm -rf "$OFFLINE_MOCK" "$OFFLINE_PCAP"
+rm -f /tmp/autopwn-ng.checkpoint
+
 # --- Summary ---
 echo
 echo "==============================="
