@@ -1075,6 +1075,11 @@ CRACK_ENABLED=1
 
 fi
 
+# Offline/crack-only (--from-pcap): همیشه cracking را روی pcap تأمین‌شده اجرا کن،
+# حتی اگر handshake ناقص امتیاز گرفته باشد، تا منطق کرک بدون سخت‌افزار رادیو قابل تست باشد.
+[ "$OFFLINE" -eq 1 ] && CRACK_ENABLED=1
+
+
 # ---------- PSK پیش‌فرض (zero GPU) ----------
 if [ "$SKIP_TO" -le 4 ] && [ "${DEFAULT_PSK:-1}" -eq 1 ] && [ -s "${CAP:-}" ] && command -v aircrack-ng >/dev/null 2>&1; then
   hr; c "فاز ۳.۰ — PSK پیش‌فرض (zero GPU)"
