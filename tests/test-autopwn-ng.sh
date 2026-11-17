@@ -173,6 +173,45 @@ else
   echo "    output: $(echo "$LOOT_OUT" | head -5)"; FAIL=$((FAIL + 1))
 fi
 
+# --- Scope & authorization safety ---
+echo
+echo "-- Scope & authorization --"
+assert_output_contains "--scope sets Scope line" "Scope: /tmp/scope.txt" bash "$SCRIPT" --scope /tmp/scope.txt --dry-run
+assert_output_contains "--authorize acknowledges authorization" "Authorization: acknowledged" bash "$SCRIPT" --authorize --dry-run
+assert_output_contains "no --authorize prints not acknowledged" "Authorization: NOT acknowledged" bash "$SCRIPT" --dry-run
+
+# in_scope() rejection logic (extracted from script)
+SCOPE_TMP="$(mktemp)"
+printf 'AA:BB:CC:DD:EE:FF\nallowed-ssid\n' > "$SCOPE_TMP"
+# shellcheck disable=SC2034
+SCOPE_FILE="$SCOPE_TMP"
+eval "$(sed -n '/^in_scope() {/,/^}/p' "$SCRIPT")"
+if in_scope "11:22:33:44:55:66" "" ; then
+  echo "  FAIL: in_scope should reject out-of-scope BSSID"; FAIL=$((FAIL + 1))
+else
+  echo "  PASS: in_scope rejects out-of-scope BSSID"; PASS=$((PASS + 1))
+fi
+if in_scope "AA:BB:CC:DD:EE:FF" "" ; then
+  echo "  PASS: in_scope accepts in-scope BSSID"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: in_scope should accept in-scope BSSID"; FAIL=$((FAIL + 1))
+fi
+if in_scope "00:00:00:00:00:00" "allowed-ssid" ; then
+  echo "  PASS: in_scope accepts in-scope SSID"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: in_scope should accept in-scope SSID"; FAIL=$((FAIL + 1))
+fi
+rm -f "$SCOPE_TMP"
+
+# Authorization rejection path (non-interactive, no --authorize)
+WIFITE4_TEST_MODE=1 bash "$SCRIPT" </dev/null >/dev/null 2>&1
+rc=$?
+if [ "$rc" -eq 1 ]; then
+  echo "  PASS: non-interactive run without --authorize exits 1"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: expected exit 1, got $rc"; FAIL=$((FAIL + 1))
+fi
+
 # --- Summary ---
 echo
 echo "==============================="

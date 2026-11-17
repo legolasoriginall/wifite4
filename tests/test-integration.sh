@@ -116,6 +116,27 @@ echo "-- Dry-run completion --"
 assert_contains "dry-run completion message" "Simulation complete" bash "$SCRIPT" --dry-run
 assert_contains "dry-run mentions handshake quality" "Handshake quality" bash "$SCRIPT" --dry-run
 
+# --- Scope & authorization safety ---
+echo
+echo "-- Scope & authorization --"
+assert_contains "--scope sets Scope line" "Scope: /tmp/scope.txt" bash "$SCRIPT" --scope /tmp/scope.txt --dry-run
+assert_contains "--authorize acknowledges authorization" "Authorization: acknowledged" bash "$SCRIPT" --authorize --dry-run
+assert_contains "no --authorize prints not acknowledged" "Authorization: NOT acknowledged" bash "$SCRIPT" --dry-run
+assert_exit "--scope missing file exits 1" 1 env WIFITE4_TEST_MODE=1 bash "$SCRIPT" --authorize --scope /no/such/file.txt
+
+# in_scope() rejection logic (extracted from script)
+SCOPE_TMP="$(mktemp)"
+printf 'AA:BB:CC:DD:EE:FF\nallowed-ssid\n' > "$SCOPE_TMP"
+# shellcheck disable=SC2034
+SCOPE_FILE="$SCOPE_TMP"
+eval "$(sed -n '/^in_scope() {/,/^}/p' "$SCRIPT")"
+if in_scope "11:22:33:44:55:66" "" ; then
+  echo "  FAIL: in_scope should reject out-of-scope BSSID"; FAIL=$((FAIL + 1))
+else
+  echo "  PASS: in_scope rejects out-of-scope BSSID"; PASS=$((PASS + 1))
+fi
+rm -f "$SCOPE_TMP"
+
 # --- Summary ---
 echo
 echo "==============================="
