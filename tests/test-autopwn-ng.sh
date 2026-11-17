@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034,SC2317  # helpers/vars below are used by eval'd code
 # ==========================================================================
 #  Lightweight unit tests for autopwn-ng.sh
 #  Runs without root or hardware — uses --dry-run/--simulate/--help only.
 #  Usage: bash tests/test-autopwn-ng.sh
 # ==========================================================================
 set -uo pipefail
-
 PASS=0
 FAIL=0
 SCRIPT="${1:-autopwn-ng.sh}"
@@ -203,6 +203,40 @@ else
   echo "  FAIL: in_scope should accept in-scope SSID"; FAIL=$((FAIL + 1))
 fi
 rm -f "$SCOPE_TMP"
+
+# select_target() menu logic (extracted)
+eval "$(sed -n '/^in_scope() {/,/^}/p' "$SCRIPT")"
+eval "$(sed -n '/^select_target(){/,/^}/p' "$SCRIPT")"
+warn(){ :; }; err(){ :; }; ok(){ :; }
+_ok=''; _rst=''
+INTERACTIVE=1
+TARGET=''; TARGET_ESSID=''; SCOPE_FILE=''
+TARGET_ROWS=$'AA:BB:CC:DD:EE:01|6|-40|WPA2|Home\nAA:BB:CC:DD:EE:02|11|-70|WPA2|Cafe'
+select_target <<< '2' >/dev/null
+if [ "$TARGET" = 'AA:BB:CC:DD:EE:02' ] && [ "$TARGET_ESSID" = 'Cafe' ]; then
+  echo "  PASS: select_target picks the numbered row"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: select_target picked '$TARGET' / '$TARGET_ESSID'"; FAIL=$((FAIL + 1))
+fi
+TARGET=''; TARGET_ESSID=''
+select_target <<< '99' >/dev/null
+if [ -z "$TARGET" ]; then
+  echo "  PASS: select_target ignores an out-of-range number"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: out-of-range number selected '$TARGET'"; FAIL=$((FAIL + 1))
+fi
+SELECT_SCOPE="$(mktemp)"
+printf 'AA:BB:CC:DD:EE:01\n' > "$SELECT_SCOPE"
+SCOPE_FILE="$SELECT_SCOPE"
+TARGET=''; TARGET_ESSID=''
+select_target <<< '2' >/dev/null; sel_rc=$?
+if [ "$sel_rc" -eq 1 ] && [ -z "$TARGET" ]; then
+  echo "  PASS: select_target rejects an out-of-scope pick"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: out-of-scope pick (rc=$sel_rc, target='$TARGET')"; FAIL=$((FAIL + 1))
+fi
+rm -f "$SELECT_SCOPE"
+SCOPE_FILE=''
 
 # Authorization rejection path (non-interactive, no --authorize)
 WIFITE4_TEST_MODE=1 bash "$SCRIPT" </dev/null >/dev/null 2>&1

@@ -101,6 +101,7 @@ sudo autopwn-ng --dry-run               # شبیه‌سازی بدون ابزا�
 sudo autopwn-ng --simulate              # همان --dry-run
 sudo autopwn-ng --doctor                # بررسی سلامت: وابستگی‌ها، GPU/OpenCL، رابط‌ها، وردلیست‌ها
 sudo autopwn-ng --no-color              # خروجی ساده بدون رنگ (یا متغیر NO_COLOR=1)
+sudo autopwn-ng --interactive           # اسکن کوتاه + انتخاب هدف با شماره (مثل wifite2)
 sudo autopwn-ng --auto                 # یک کلیک: اسکن + برداشت از همه + کرک + گزارش
   sudo autopwn-ng --pmkid-only           # برداشت کوتاه PMKID (۱۵s)؛ در صورت یافتن مستقیم به کرک
      sudo autopwn-ng --scope scope.txt --authorize   # محدود به scope + اجازهٔ صریح
