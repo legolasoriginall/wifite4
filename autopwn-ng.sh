@@ -92,10 +92,10 @@ doctor() {
   c "GPU / OpenCL backend:"
   if command -v hashcat >/dev/null 2>&1; then
     local devinfo
-    devinfo=$(hashcat -I 2>/dev/null | head -20)
-    if printf '%s' "$devinfo" | grep -qiE 'opencl|cuda|device'; then
+    devinfo=$(hashcat -I 2>/dev/null | grep -iE 'device|opencl|cuda' | head -8)
+    if [ -n "$devinfo" ]; then
       ok "  hashcat backend: available"
-      printf '%s\n' "$devinfo" | grep -iE 'device|opencl|cuda' | head -8 | sed 's/^/    /'
+      printf '%s\n' "$devinfo" | sed 's/^/    /'
       pass=$((pass+1))
     else
       warn "  hashcat backend: no OpenCL/CUDA device detected"
@@ -111,8 +111,8 @@ doctor() {
   if [ -z "$ifaces" ] && command -v ip >/dev/null 2>&1; then
     ifaces=$(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | grep -iE 'wlan|wlp|wifi' || true)
   fi
-  local n=0
-  [ -n "$ifaces" ] && n=$(printf '%s\n' "$ifaces" | grep -c .)
+  local n
+  n=$(printf '%s\n' "$ifaces" | grep -c . || true)
   if [ "$n" -gt 0 ]; then
     ok "  found $n wireless interface(s): $(printf '%s' "$ifaces" | tr '\n' ' ')"
     pass=$((pass+1))
@@ -677,6 +677,7 @@ if [ -z "${WORK:-}" ]; then
 fi
 POT="$WORK/hashcat.pot"
 HASH="$WORK/targets.hc22000"
+HC_BASE=(hashcat -m 22000 --potfile-path "$POT" -w "$WLIMIT" -O --force --session "$SESSION")
 if [ "$OFFLINE" -eq 1 ]; then
   CAP="$FROM_PCAP"
 else
@@ -1098,8 +1099,7 @@ fi
 # ---------- بازیابی نشست hashcat (--restore) ----------
 if [ "$RESTORE" -eq 1 ] && [ "$SKIP_TO" -le 4 ] && command -v hashcat >/dev/null 2>&1; then
   hr; c "فاز ۳ — بازیابی نشست hashcat ($SESSION)"
-  timeout 900 hashcat -m 22000 --potfile-path "$POT" -w "$WLIMIT" -O --force \
-    --session "$SESSION" --restore >> "$WORK/hc.log" 2>&1
+  timeout 900 "${HC_BASE[@]}" --restore >> "$WORK/hc.log" 2>&1
   save_checkpoint 4
 fi
 
@@ -1140,8 +1140,7 @@ run_hc(){
   local tot cr; tot=$(total_count); cr=$(cracked_count)
   [ "$cr" -ge "$tot" ] && return 0
   c "  → $label  ($cr/$tot)"
-  timeout 900 hashcat -m 22000 --potfile-path "$POT" -w "$WLIMIT" -O --force \
-    --session "$SESSION" --status --status-timer=30 "$HASH" "$@" >> "$WORK/hc.log" 2>&1
+  timeout 900 "${HC_BASE[@]}" --status --status-timer=30 "$HASH" "$@" >> "$WORK/hc.log" 2>&1
 }
 
 build_dicts
@@ -1191,8 +1190,6 @@ if [ -s "$WORK/mschapv2.txt" ]; then
 fi
 
   save_checkpoint 4
-elif [ "$RESTORE" -eq 0 ] && ! command -v hashcat >/dev/null 2>&1; then
-  warn "hashcat یافت نشد — فاز ۳ (کرک) رد شد."
 fi
 
 # ---------- فاز ۴: WPS Pixie Dust + Brute ----------
