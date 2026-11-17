@@ -120,6 +120,7 @@ assert_exit "-t with no value fails" 1 bash "$SCRIPT" -t
 echo
 echo "-- Dry-run completion --"
 assert_contains "dry-run completion message" "Simulation complete" bash "$SCRIPT" --dry-run
+assert_contains "dry-run mentions handshake quality" "Handshake quality" bash "$SCRIPT" --dry-run
 
 # --- Summary ---
 echo

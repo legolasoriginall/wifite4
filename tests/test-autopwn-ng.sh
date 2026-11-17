@@ -58,6 +58,7 @@ echo
 echo "-- Dry-run & simulate --"
 assert_exit "--dry-run exits 0" 0 bash "$SCRIPT" --dry-run
 assert_exit "--simulate exits 0" 0 bash "$SCRIPT" --simulate
+assert_output_contains "dry-run mentions handshake quality" "Handshake quality" bash "$SCRIPT" --dry-run
 assert_output_contains "--dry-run prints simulation header" "SIMULATION MODE" bash "$SCRIPT" --dry-run
 assert_output_contains "--simulate prints simulation header" "SIMULATION MODE" bash "$SCRIPT" --simulate
 assert_output_contains "--dry-run prints completion message" "Simulation complete" bash "$SCRIPT" --dry-run
