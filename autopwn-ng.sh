@@ -68,12 +68,13 @@ TARGET_TOTAL=0
 
 # ---------- UI: palette + helpers (wifite2-style) ----------
 ui_palette_on(){
-  _c=$'\033[1;36m' _ok=$'\033[1;32m' _warn=$'\033[1;33m' _err=$'\033[1;31m'
-  _hr=$'\033[1;35m' _dim=$'\033[2m' _bold=$'\033[1m' _blue=$'\033[1;34m' _mag=$'\033[1;35m'
+  # پایه (نه روشن) تا روی ترمینال سفید هم خوانا بماند
+  _c=$'\033[36m' _ok=$'\033[32m' _warn=$'\033[33m' _err=$'\033[31m'
+  _mag=$'\033[35m' _dim=$'\033[2m' _bold=$'\033[1m'
   _rst=$'\033[0m'
 }
 ui_palette_off(){
-  _c='' _ok='' _warn='' _err='' _hr='' _dim='' _bold='' _blue='' _mag='' _rst=''
+  _c='' _ok='' _warn='' _err='' _mag='' _dim='' _bold='' _rst=''
 }
 if [[ -t 1 ]] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then
   ui_palette_on
@@ -84,13 +85,12 @@ c(){ printf '%s[*]%s %s\n' "$_c" "$_rst" "$*"; }
 ok(){ printf '%s[+]%s %s\n' "$_ok" "$_rst" "$*"; }
 warn(){ printf '%s[!]%s %s\n' "$_warn" "$_rst" "$*"; }
 err(){ printf '%s[-]%s %s\n' "$_err" "$_rst" "$*"; }
-rule(){ printf '%s%s%s\n' "$_hr" "────────────────────────────────────────────────────────────" "$_rst"; }
+rule(){ printf '%s%s%s\n' "$_mag" "────────────────────────────────────────────────────────────" "$_rst"; }
 hr(){ rule; }
 phase(){ printf '\n%s▌%s %s%s%s\n' "$_mag" "$_rst" "$_bold" "$*" "$_rst"; rule; }
-plan_line(){ printf '│ %s%s%s\n' "$_c" "$*" "$_rst"; }
+plan_line(){ printf '%s│%s %s\n' "$_dim" "$_rst" "$*"; }
 banner(){
   local i line
-  local -a art_colors=("$_mag" "$_mag" "$_blue" "$_blue" "$_c" "$_c")
   local -a art=(
 '  ██╗    ██╗██╗███████╗██╗████████╗███████╗'
 '  ██║    ██║██║██╔════╝██║╚══██╔══╝██╔════╝'
@@ -100,9 +100,9 @@ banner(){
 '   ╚══╝╚══╝ ╚═╝╚═╝     ╚═╝   ╚═╝   ╚══════╝'
   )
   printf '\n'
-  for i in "${!art[@]}"; do printf '%s%s%s\n' "${art_colors[i]}" "${art[i]}" "$_rst"; done
+  for i in "${!art[@]}"; do printf '%s%s%s\n' "$_c" "${art[i]}" "$_rst"; done
   printf '  %s▸ autopwn-ng · wireless attack chain%s\n' "$_dim" "$_rst"
-  printf '  %s▸ authorized testing only · wifite4 toolkit%s\n\n' "$_warn" "$_rst"
+  printf '  %s▸ authorized testing only · wifite4 toolkit%s\n\n' "$_bold" "$_rst"
 }
 # نوار پیشرفت فقط روی ترمینال؛ در پایپ/CI همان sleep ساده
 wait_bar(){
