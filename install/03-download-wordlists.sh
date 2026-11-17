@@ -11,16 +11,10 @@ require_root
 
 if [[ "${WIFITE4_TEST_MODE:-0}" == "1" ]]; then
   WIFITE4_PREFIX="${WIFITE4_PREFIX:-$(mktemp -d)}"
-  WORDLIST_DIR="$WIFITE4_PREFIX/opt/wordlists"
-  RULES_DEST="$WIFITE4_PREFIX/usr/share/hashcat/rules"
-  KWP_DEST="$WIFITE4_PREFIX/usr/local/bin/kwp"
-  KB_DEST="$WIFITE4_PREFIX/opt/wordlists"
-else
-  WORDLIST_DIR=/opt/wordlists
-  RULES_DEST=/usr/share/hashcat/rules
-  KWP_DEST=/usr/local/bin/kwp
-  KB_DEST=/opt/wordlists
 fi
+WORDLIST_DIR="${WIFITE4_PREFIX:-}/opt/wordlists"
+RULES_DEST="${WIFITE4_PREFIX:-}/usr/share/hashcat/rules"
+KWP_DEST="${WIFITE4_PREFIX:-}/usr/local/bin/kwp"
 
 mkdir -p "$WORDLIST_DIR" "$RULES_DEST"
 
@@ -47,6 +41,6 @@ install -m 755 "$WORDLIST_DIR/kwprocessor/kwp" "$KWP_DEST"
 install -m 644 \
   "$WORDLIST_DIR/kwprocessor/keyboard-base.txt" \
   "$WORDLIST_DIR/kwprocessor/keyboard-rules.txt" \
-  "$KB_DEST/"
+  "$WORDLIST_DIR/"
 
 ok "وردلیست‌ها و ابزارها آماده شدند."

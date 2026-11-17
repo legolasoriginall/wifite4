@@ -15,7 +15,22 @@ say()  { printf '%s[*]%s %s\n' "$_c_info" "$_c_reset" "$*"; }
 ok()   { printf '%s[+]%s %s\n' "$_c_ok"   "$_c_reset" "$*"; }
 warn() { printf '%s[!]%s %s\n' "$_c_warn" "$_c_reset" "$*" >&2; }
 
-# Require root unless WIFITE4_TEST_MODE=1.
+# Require root unless WIFITE4_TEST_MODE=1; re-exec with sudo when possible.
+ensure_root() {
+  if [[ "${WIFITE4_TEST_MODE:-0}" == "1" ]]; then return 0; fi
+  if (( EUID == 0 )); then return 0; fi
+  if (( DRY_RUN == 1 )); then
+    warn "dry-run بدون root اجرا می‌شود؛ نصب واقعی به root نیاز دارد."
+    return 0
+  fi
+  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    say "دسترسی root لازم است؛ اجرای مجدد با sudo…"
+    exec sudo -E bash "$0" "$@"
+  fi
+  die "این اسکریپت به root نیاز دارد: sudo bash $0"
+}
+
+# Require root (no sudo re-exec) unless WIFITE4_TEST_MODE=1.
 require_root() {
   if [[ "${WIFITE4_TEST_MODE:-0}" == "1" ]]; then return 0; fi
   (( EUID == 0 )) || die "به root نیاز دارد: sudo bash $0"

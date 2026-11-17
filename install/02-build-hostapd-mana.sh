@@ -16,12 +16,9 @@ apt-get -o APT::Sandbox::User=root install -y --no-install-recommends \
 
 if [[ "${WIFITE4_TEST_MODE:-0}" == "1" ]]; then
   WIFITE4_PREFIX="${WIFITE4_PREFIX:-$(mktemp -d)}"
-  HOSTAPD_DIR="$WIFITE4_PREFIX/opt/hostapd-mana"
-  MANA_DEST="$WIFITE4_PREFIX/usr/local/bin/hostapd-mana"
-else
-  HOSTAPD_DIR=/opt/hostapd-mana
-  MANA_DEST=/usr/local/bin/hostapd-mana
 fi
+HOSTAPD_DIR="${WIFITE4_PREFIX:-}/opt/hostapd-mana"
+MANA_DEST="${WIFITE4_PREFIX:-}/usr/local/bin/hostapd-mana"
 
 clone_or_replace "$HOSTAPD_DIR" https://github.com/sensepost/hostapd-mana
 
