@@ -222,6 +222,54 @@ fi
 rm -rf "$OFFLINE_MOCK" "$OFFLINE_PCAP"
 rm -f /tmp/autopwn-ng.checkpoint
 
+# --- hashcat --restore path ---
+echo
+echo "-- hashcat --restore --"
+RESTORE_MOCK="$(mktemp -d)"
+cat > "$RESTORE_MOCK/hcxpcapngtool" <<'MOCK'
+#!/usr/bin/env bash
+out=""
+while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -E) shift 2;; --eapmschapv2=*) shift;; *) shift;; esac; done
+mkdir -p "$(dirname "$out")"
+printf 'dummy hash\n' > "$out"
+exit 0
+MOCK
+cat > "$RESTORE_MOCK/hcxhashtool" <<'MOCK'
+#!/usr/bin/env bash
+in=""; out=""
+while [ $# -gt 0 ]; do case "$1" in -i) in="$2"; shift 2;; -o) out="$2"; shift 2;; *) shift;; esac; done
+[ -n "$out" ] && cp "$in" "$out"
+exit 0
+MOCK
+cat > "$RESTORE_MOCK/hashcat" <<'MOCK'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$RESTORE_MOCK_CALLS"
+exit 0
+MOCK
+for t in aircrack-ng tshark; do printf '#!/usr/bin/env bash\nexit 0\n' > "$RESTORE_MOCK/$t" && chmod +x "$RESTORE_MOCK/$t"; done
+chmod +x "$RESTORE_MOCK/hcxpcapngtool" "$RESTORE_MOCK/hcxhashtool" "$RESTORE_MOCK/hashcat"
+RESTORE_PCAP="$(mktemp)"
+printf 'dummy pcap' > "$RESTORE_PCAP"
+export RESTORE_MOCK_CALLS="$RESTORE_MOCK/calls.txt"
+RESTORE_OUT=$(PATH="$RESTORE_MOCK:/usr/bin:/bin" bash "$SCRIPT" --from-pcap "$RESTORE_PCAP" --session myrun --restore 2>&1)
+RESTORE_RC=$?
+RESTORE_SESS_CALLS=$(grep -cF -- '--session' "$RESTORE_MOCK_CALLS" 2>/dev/null || true)
+RESTORE_RESTORE_CALLS=$(grep -cF -- '--restore' "$RESTORE_MOCK_CALLS" 2>/dev/null || true)
+RESTORE_LAYER_CALLS=$(grep -cF -- ' -a ' "$RESTORE_MOCK_CALLS" 2>/dev/null || true)
+if [ "$RESTORE_RC" -eq 0 ] && [ "$RESTORE_SESS_CALLS" -eq 1 ] \
+   && [ "$RESTORE_RESTORE_CALLS" -eq 1 ] && [ "$RESTORE_LAYER_CALLS" -eq 0 ] \
+   && grep -qF -- '--session myrun' "$RESTORE_MOCK_CALLS" \
+   && printf '%s\n' "$RESTORE_OUT" | grep -qF "بازیابی نشست" \
+   && ! printf '%s\n' "$RESTORE_OUT" | grep -qF "دیکشنری SSID/وندور"; then
+  echo "  PASS: --restore calls hashcat once for session myrun, skips layers, exits 0"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: --restore (rc=$RESTORE_RC, session-calls=$RESTORE_SESS_CALLS, restore-calls=$RESTORE_RESTORE_CALLS, layer-calls=$RESTORE_LAYER_CALLS)"; FAIL=$((FAIL + 1))
+  echo "    output: $(echo "$RESTORE_OUT" | head -3)"
+fi
+unset RESTORE_MOCK_CALLS
+rm -rf "$RESTORE_MOCK" "$RESTORE_PCAP"
+rm -f /tmp/autopwn-ng.checkpoint
+
 # --- Summary ---
 echo
 echo "==============================="
