@@ -21,6 +21,7 @@ usage() {
 EOF
 }
 
+ARGS=("$@")
 while (( $# > 0 )); do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
@@ -30,12 +31,8 @@ while (( $# > 0 )); do
   shift
 done
 
-# ---------------------------------------------------------------- prerequisite checks
-command -v install >/dev/null 2>&1 || die "install (coreutils) پیدا نشد."
-command -v bash   >/dev/null 2>&1 || die "bash پیدا نشد."
-
 # ---------------------------------------------------------------- root
-ensure_root "$@"
+ensure_root "${ARGS[@]}"
 
 # ---------------------------------------------------------------- source-file validation
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

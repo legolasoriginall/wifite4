@@ -8,10 +8,7 @@ command -v git  >/dev/null 2>&1 || die "git پیدا نشد: sudo apt-get instal
 command -v wget >/dev/null 2>&1 || die "wget پیدا نشد: sudo apt-get install -y wget"
 require_root
 
-if [[ "${WIFITE4_TEST_MODE:-0}" == "1" && -z "${WIFITE4_PREFIX:-}" ]]; then
-  WIFITE4_PREFIX="$(mktemp -d)"
-  trap 'rm -rf "$WIFITE4_PREFIX"' EXIT
-fi
+use_test_prefix
 WORDLIST_DIR="${WIFITE4_PREFIX:-}/opt/wordlists"
 RULES_DEST="${WIFITE4_PREFIX:-}/usr/share/hashcat/rules"
 

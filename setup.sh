@@ -43,6 +43,7 @@ usage() {
 EOF
 }
 
+ARGS=("$@")
 while (( $# > 0 )); do
   case "$1" in
     --quick)        DOWNLOAD_WORDLISTS=0 ;;
@@ -55,7 +56,7 @@ while (( $# > 0 )); do
 done
 
 # ---------------------------------------------------------------- root
-ensure_root "$@"
+ensure_root "${ARGS[@]}"
 
 # ---------------------------------------------------------------- log
 if (( DRY_RUN == 0 )); then

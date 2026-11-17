@@ -1320,13 +1320,12 @@ if [ "$SKIP_TO" -le 6 ] && [ "$DO_TWIN" -eq 1 ] && [ -n "$IFACE2" ] && ! [ -s "$
   else
     warn "hostapd-mana یا wifiphisher نصب نیست."
   fi
+  save_checkpoint 6
 else
   if [ "$DO_TWIN" -eq 1 ] && ! [ -s "$WORK/cracked.txt" ]; then
     warn "hostapd-mana یا wifiphisher یافت نشد — فاز ۵ (Evil Twin) رد شد."
   fi
 fi
-
-  save_checkpoint 6
 
 # ---------- فاز ۶: Post-exploit ----------
 if [ "$SKIP_TO" -le 7 ] && [ "$DO_POST" -eq 1 ] && [ "$OFFLINE" -ne 1 ] && [ -s "$WORK/cracked.txt" ] && command -v nmap >/dev/null 2>&1; then

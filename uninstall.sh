@@ -32,6 +32,7 @@ usage() {
 EOF
 }
 
+ARGS=("$@")
 while (( $# > 0 )); do
   case "$1" in
     --keep-wordlists) KEEP_WORDLISTS=1 ;;
@@ -43,7 +44,7 @@ while (( $# > 0 )); do
 done
 
 # ---------------------------------------------------------------- root
-ensure_root "$@"
+ensure_root "${ARGS[@]}"
 
 # ---------------------------------------------------------------- log
 if (( DRY_RUN == 0 )); then

@@ -36,6 +36,14 @@ require_root() {
   (( EUID == 0 )) || die "به root نیاز دارد: sudo bash $0"
 }
 
+# In test mode, use and auto-clean an isolated prefix unless one was given.
+use_test_prefix() {
+  if [[ "${WIFITE4_TEST_MODE:-0}" == "1" && -z "${WIFITE4_PREFIX:-}" ]]; then
+    WIFITE4_PREFIX="$(mktemp -d)"
+    trap 'rm -rf "$WIFITE4_PREFIX"' EXIT
+  fi
+}
+
 # Clone a git repo into dir, or replace it if a previous clone was partial/invalid.
 clone_or_replace() {
   local dir="$1" url="$2"
