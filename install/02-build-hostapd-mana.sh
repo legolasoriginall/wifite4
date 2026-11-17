@@ -14,8 +14,9 @@ apt-get -o APT::Sandbox::User=root install -y --no-install-recommends \
   libssl-dev libnl-3-dev libnl-genl-3-dev pkg-config make gcc \
   || die "نصب پیش‌نیازهای کامپایل ناموفق بود."
 
-if [[ "${WIFITE4_TEST_MODE:-0}" == "1" ]]; then
-  WIFITE4_PREFIX="${WIFITE4_PREFIX:-$(mktemp -d)}"
+if [[ "${WIFITE4_TEST_MODE:-0}" == "1" && -z "${WIFITE4_PREFIX:-}" ]]; then
+  WIFITE4_PREFIX="$(mktemp -d)"
+  trap 'rm -rf "$WIFITE4_PREFIX"' EXIT
 fi
 HOSTAPD_DIR="${WIFITE4_PREFIX:-}/opt/hostapd-mana"
 MANA_DEST="${WIFITE4_PREFIX:-}/usr/local/bin/hostapd-mana"
