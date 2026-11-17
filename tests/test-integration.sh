@@ -22,6 +22,7 @@ for t in airmon-ng hcxdumptool hashcat hcxpcapngtool airodump-ng iw; do
   printf '#!/usr/bin/env bash\nexit 0\n' > "$MOCK_DIR/$t" && chmod +x "$MOCK_DIR/$t"
 done
 export PATH="$MOCK_DIR:$PATH"
+export WIFITE4_CHECKPOINT="$MOCK_DIR/checkpoint"
 
 assert_exit() {
   local desc="$1" expected="$2"; shift 2
@@ -223,7 +224,7 @@ rm -rf "$ACTIVE_MOCK2"
 # --- Offline mode (--from-pcap) ---
 echo
 echo "-- Offline mode (from-pcap) --"
-rm -f /tmp/autopwn-ng.checkpoint
+rm -f "$WIFITE4_CHECKPOINT"
 OFFLINE_MOCK="$(mktemp -d)"
 cat > "$OFFLINE_MOCK/hcxpcapngtool" <<'MOCK'
 #!/usr/bin/env bash
@@ -260,7 +261,7 @@ else
   echo "    output: $(echo "$OFFLINE_OUT" | head -3)"
 fi
 rm -rf "$OFFLINE_MOCK" "$OFFLINE_PCAP"
-rm -f /tmp/autopwn-ng.checkpoint
+rm -f "$WIFITE4_CHECKPOINT"
 
 # --- hashcat --restore path ---
 echo
@@ -308,12 +309,12 @@ else
 fi
 unset RESTORE_MOCK_CALLS
 rm -rf "$RESTORE_MOCK" "$RESTORE_PCAP"
-rm -f /tmp/autopwn-ng.checkpoint
+rm -f "$WIFITE4_CHECKPOINT"
 
 # --- resume checkpoint persists hashcat session/workload/profile ---
 echo
 echo "-- resume checkpoint fields --"
-rm -f /tmp/autopwn-ng.checkpoint
+rm -f "$WIFITE4_CHECKPOINT"
 eval "$(sed -n '/^save_checkpoint() {/,/^}/p' "$SCRIPT")"
 CHECKPOINT="$(mktemp)"
 # shellcheck disable=SC2034  # the four vars are consumed by the eval'd save_checkpoint()
@@ -336,7 +337,7 @@ rm -f "$CHECKPOINT"
 
 RESUME_WORK="$(mktemp -d)"
 printf 'CKPT_WORK=%s\nCKPT_PHASE=3\nCKPT_SESSION=run42\nCKPT_WLIMIT=1\nCKPT_PROFILE=stealth\n' \
-  "$RESUME_WORK" > /tmp/autopwn-ng.checkpoint
+  "$RESUME_WORK" > "$WIFITE4_CHECKPOINT"
 RESUME_OUT=$(bash "$SCRIPT" --resume --dry-run 2>&1)
 if printf '%s\n' "$RESUME_OUT" | grep -qF 'Session: run42' \
    && printf '%s\n' "$RESUME_OUT" | grep -qF 'Workload: 1' \
@@ -356,15 +357,43 @@ else
   echo "  FAIL: resume session mismatch not handled"; FAIL=$((FAIL + 1))
 fi
 
-printf 'CKPT_WORK=%s\nCKPT_PHASE=abc\nCKPT_SESSION=run42\n' "$RESUME_WORK" > /tmp/autopwn-ng.checkpoint
+printf 'CKPT_WORK=%s\nCKPT_PHASE=abc\nCKPT_SESSION=run42\n' "$RESUME_WORK" > "$WIFITE4_CHECKPOINT"
 INVALID_OUT=$(bash "$SCRIPT" --resume --dry-run 2>&1)
 if printf '%s\n' "$INVALID_OUT" | grep -qF 'معتبر نیست'; then
   echo "  PASS: invalid checkpoint is rejected instead of sourced"; PASS=$((PASS + 1))
 else
   echo "  FAIL: invalid checkpoint not rejected"; FAIL=$((FAIL + 1))
 fi
+# forged checkpoint must never be executed (only parsed)
+FORGED_DIR="$(mktemp -d)"
+{
+  printf 'CKPT_WORK=%s\n' "$RESUME_WORK"
+  printf 'CKPT_PHASE=3\n'
+  # shellcheck disable=SC2016  # literal $(...) must never execute
+  printf 'CKPT_SESSION=$(touch %s/session-pwned)\n' "$FORGED_DIR"
+  printf 'CKPT_WLIMIT=1\n'
+  printf 'CKPT_PROFILE=stealth\n'
+  printf 'touch %s/pwned\n' "$FORGED_DIR"
+} > "$FORGED_DIR/checkpoint"
+WIFITE4_CHECKPOINT="$FORGED_DIR/checkpoint" bash "$SCRIPT" --resume --dry-run >/dev/null 2>&1
+FORGED_RC=$?
+if [ "$FORGED_RC" -eq 0 ] && [ ! -e "$FORGED_DIR/pwned" ] && [ ! -e "$FORGED_DIR/session-pwned" ]; then
+  echo "  PASS: forged checkpoint content is parsed, not executed"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: forged checkpoint executed (rc=$FORGED_RC)"; FAIL=$((FAIL + 1))
+fi
+
+ln -s "$FORGED_DIR/checkpoint" "$FORGED_DIR/link"
+LINK_OUT=$(WIFITE4_CHECKPOINT="$FORGED_DIR/link" bash "$SCRIPT" --resume --dry-run 2>&1)
+LINK_RC=$?
+if [ "$LINK_RC" -eq 0 ] && printf '%s\n' "$LINK_OUT" | grep -qF 'معتبر نیست' && [ ! -e "$FORGED_DIR/pwned" ]; then
+  echo "  PASS: checkpoint symlink is refused, not followed"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: checkpoint symlink handling (rc=$LINK_RC)"; FAIL=$((FAIL + 1))
+fi
+rm -rf "$FORGED_DIR"
 rm -rf "$RESUME_WORK"
-rm -f /tmp/autopwn-ng.checkpoint
+rm -f "$WIFITE4_CHECKPOINT"
 
 # --- cleanup must not touch host networking in dry-run/offline ---
 echo
@@ -406,7 +435,7 @@ else
   echo "    calls: $(printf '%s' "$CLEAN_CALLS" | tr '\n' '|')"; FAIL=$((FAIL + 1))
 fi
 rm -rf "$CLEAN_MOCK" "$CLEAN_PCAP"
-rm -f /tmp/autopwn-ng.checkpoint
+rm -f "$WIFITE4_CHECKPOINT"
 
 # --- Summary ---
 echo

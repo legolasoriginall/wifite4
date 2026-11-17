@@ -45,7 +45,15 @@ SESSION="autopwn-ng"
 SESSION_EXPLICIT=0
 PROFILE_EXPLICIT=0
 WLIMIT=3
-CHECKPOINT="/tmp/autopwn-ng.checkpoint"
+if [ -n "${WIFITE4_CHECKPOINT:-}" ]; then
+  CHECKPOINT="$WIFITE4_CHECKPOINT"
+elif [ -n "${XDG_STATE_HOME:-}" ]; then
+  CHECKPOINT="$XDG_STATE_HOME/wifite4/checkpoint"
+elif [ -n "${HOME:-}" ]; then
+  CHECKPOINT="$HOME/.local/state/wifite4/checkpoint"
+else
+  CHECKPOINT="${TMPDIR:-/tmp}/wifite4-state-$EUID/checkpoint"
+fi
 PMKID_N=0
 EAPOL_N=0
 EAP_N=0
@@ -706,19 +714,45 @@ fi
 
 # ---------- تابع ذخیرهٔ checkpoint ----------
 save_checkpoint() {
-  local phase="$1"
-  {
+  [ -n "${CHECKPOINT:-}" ] || return 0
+  local phase="$1" tmp="$CHECKPOINT.tmp.$$"
+  if {
     printf 'CKPT_WORK=%s\n' "$WORK"
     printf 'CKPT_PHASE=%d\n' "$phase"
     printf 'CKPT_SESSION=%s\n' "$SESSION"
     printf 'CKPT_WLIMIT=%d\n' "$WLIMIT"
     printf 'CKPT_PROFILE=%s\n' "$PROFILE"
-  } > "$CHECKPOINT"
+  } > "$tmp"; then
+    mv -f "$tmp" "$CHECKPOINT" || rm -f "$tmp"
+    chmod 600 "$CHECKPOINT" 2>/dev/null || true
+  else
+    rm -f "$tmp"
+  fi
+}
+
+# آماده‌سازی مسیر اختصاصی checkpoint؛ اگر قابل اعتماد نبود غیرفعال می‌شود
+checkpoint_init() {
+  [ -n "${CHECKPOINT:-}" ] || return 0
+  local dir
+  case "$CHECKPOINT" in
+    */*) dir="${CHECKPOINT%/*}" ;;
+    *) dir="." ;;
+  esac
+  if ! mkdir -p "$dir" 2>/dev/null || [ ! -d "$dir" ] || [ ! -O "$dir" ]; then
+    warn "مسیر checkpoint امن نیست؛ ذخیره/ادامه غیرفعال شد: $dir"
+    CHECKPOINT=""
+    return 0
+  fi
+  chmod 700 "$dir" 2>/dev/null || true
+  [ -L "$CHECKPOINT" ] && rm -f "$CHECKPOINT"
 }
 
 # خواندن امن checkpoint (بدون source) + اعتبارسنجی مقادیر
 load_checkpoint() {
   local key val
+  [ -n "${CHECKPOINT:-}" ] || return 1
+  [ -L "$CHECKPOINT" ] && return 1
+  { [ -f "$CHECKPOINT" ] && [ -O "$CHECKPOINT" ]; } || return 1
   CKPT_WORK="" CKPT_PHASE="" CKPT_SESSION="" CKPT_WLIMIT="" CKPT_PROFILE=""
   while IFS='=' read -r key val || [ -n "$key" ]; do
     case "$key" in
@@ -738,9 +772,10 @@ load_checkpoint() {
 }
 
 # ---------- حالت resume ----------
+if [ "$RESUME" -eq 1 ] || [ "$DRY_RUN" -ne 1 ]; then checkpoint_init; fi
 SKIP_TO=0
 if [ "$RESUME" -eq 1 ]; then
-  if [ -f "$CHECKPOINT" ] && load_checkpoint; then
+  if load_checkpoint; then
     WORK="$CKPT_WORK"
     SKIP_TO=$(( CKPT_PHASE + 1 ))
     if [ -n "$CKPT_SESSION" ]; then

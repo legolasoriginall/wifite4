@@ -9,6 +9,9 @@ set -uo pipefail
 PASS=0
 FAIL=0
 SCRIPT="${1:-autopwn-ng.sh}"
+TEST_STATE="$(mktemp -d)"
+trap 'rm -rf "$TEST_STATE"' EXIT
+export WIFITE4_CHECKPOINT="$TEST_STATE/checkpoint"
 
 # Resolve script path relative to repo root
 if [[ ! -f "$SCRIPT" ]]; then

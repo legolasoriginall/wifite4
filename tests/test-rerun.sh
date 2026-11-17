@@ -4,6 +4,9 @@
 #  Usage: bash tests/test-rerun.sh
 # ==========================================================================
 set -uo pipefail
+TEST_STATE="$(mktemp -d)"
+trap 'rm -rf "$TEST_STATE"' EXIT
+export WIFITE4_CHECKPOINT="$TEST_STATE/checkpoint"
 # shellcheck disable=SC2034,SC2317,SC2329
 
 # Test mode: allow install scripts to run without root in restricted CI environments
