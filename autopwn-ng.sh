@@ -1095,8 +1095,16 @@ if [ "$SKIP_TO" -le 4 ] && [ "${DEFAULT_PSK:-1}" -eq 1 ] && [ -s "${CAP:-}" ] &&
   fi
 fi
 
+# ---------- بازیابی نشست hashcat (--restore) ----------
+if [ "$RESTORE" -eq 1 ] && [ "$SKIP_TO" -le 4 ] && command -v hashcat >/dev/null 2>&1; then
+  hr; c "فاز ۳ — بازیابی نشست hashcat ($SESSION)"
+  timeout 900 hashcat -m 22000 --potfile-path "$POT" -w "$WLIMIT" -O --force \
+    --session "$SESSION" --restore >> "$WORK/hc.log" 2>&1
+  save_checkpoint 4
+fi
+
 # ---------- فاز ۳: موتور کرک ----------
-if [ "$SKIP_TO" -le 4 ] && [ "${CRACK_ENABLED:-1}" -eq 1 ] && command -v hashcat >/dev/null 2>&1; then
+if [ "$RESTORE" -eq 0 ] && [ "$SKIP_TO" -le 4 ] && [ "${CRACK_ENABLED:-1}" -eq 1 ] && command -v hashcat >/dev/null 2>&1; then
 hr; c "فاز ۳ — موتور کرک مرحله‌ای"
 
 
@@ -1132,12 +1140,8 @@ run_hc(){
   local tot cr; tot=$(total_count); cr=$(cracked_count)
   [ "$cr" -ge "$tot" ] && return 0
   c "  → $label  ($cr/$tot)"
-  local sess_args=(--session "$SESSION")
-  if [ "$RESTORE" -eq 1 ]; then
-    sess_args+=(--restore)
-  fi
   timeout 900 hashcat -m 22000 --potfile-path "$POT" -w "$WLIMIT" -O --force \
-    --status --status-timer=30 "${sess_args[@]}" "$HASH" "$@" >> "$WORK/hc.log" 2>&1
+    --session "$SESSION" --status --status-timer=30 "$HASH" "$@" >> "$WORK/hc.log" 2>&1
 }
 
 build_dicts
@@ -1180,16 +1184,14 @@ done
 # لایه ۸: Enterprise MSCHAPv2
 if [ -s "$WORK/mschapv2.txt" ]; then
   hr; c "فاز ۳ب — کرک Enterprise (MSCHAPv2)"
-  ent_sess=(--session "${SESSION}-ent")
-  [ "$RESTORE" -eq 1 ] && ent_sess+=(--restore)
-  timeout 600 hashcat -m 5500 --potfile-path "$POT" -w "$WLIMIT" --force "${ent_sess[@]}" \
+  timeout 600 hashcat -m 5500 --potfile-path "$POT" -w "$WLIMIT" --force --session "${SESSION}-ent" \
     "$WORK/mschapv2.txt" "${WORDLISTS[0]}" >> "$WORK/hc.log" 2>&1
   hashcat -m 5500 "$WORK/mschapv2.txt" --show --potfile-path "$POT" 2>/dev/null \
     >> "$WORK/enterprise-cracked.txt"
 fi
 
   save_checkpoint 4
-else
+elif [ "$RESTORE" -eq 0 ] && ! command -v hashcat >/dev/null 2>&1; then
   warn "hashcat یافت نشد — فاز ۳ (کرک) رد شد."
 fi
 
