@@ -231,18 +231,18 @@ in_scope() {
 wps_state_file() { printf '%s' "${WPS_STATE:-/tmp/wifite4-wps-state.tsv}"; }
 
 wps_is_locked() {
-  # $1 = bssid ; returns 0 if locked (and sleeps), 1 if free
-  local b="$1" now until
+  # $1 = bssid ; sleeps if currently locked
+  local b="$1" now until wait
+  [ -f "$(wps_state_file)" ] || return 0
   now=$(date +%s)
-  [ -f "$(wps_state_file)" ] || return 1
   until=$(awk -F'\t' -v b="$b" '$1==b{print $2}' "$(wps_state_file)" 2>/dev/null | head -1)
-  [ -z "$until" ] && return 1
+  [ -z "$until" ] && return 0
   if [ "$until" -gt "$now" ] 2>/dev/null; then
-    local wait=$((until - now))
+    wait=$((until - now))
     warn "WPS lockout on $b — waiting ${wait}s"
     sleep "$wait"
   fi
-  return 1
+  return 0
 }
 
 wps_set_lockout() {
@@ -268,19 +268,6 @@ wps_detect_lockout() {
     return 0
   fi
   return 1
-}
-
-wps_record_pin() {
-  # $1 = bssid ; $2 = pin
-  local b="$1" pin="$2" tmp
-  tmp="$(wps_state_file).tmp"
-  if [ -f "$(wps_state_file)" ]; then
-    awk -F'\t' -v b="$b" '$1!=b' "$(wps_state_file)" > "$tmp" 2>/dev/null
-  else
-    : > "$tmp"
-  fi
-  printf '%s\t0\t%s\n' "$b" "$pin" >> "$tmp"
-  mv -f "$tmp" "$(wps_state_file)" 2>/dev/null
 }
 
 # ---------- الگوریتم‌های شناخته‌شدهٔ WPS PIN ----------
@@ -453,20 +440,11 @@ crack_wep() {
 
 # ---------- تشخیص subnet شبکهٔ کرک‌شده ----------
 detect_subnet() {
-  local sub="" gw det
-  # ۱) اتصال موقت برای تشخیص subnet واقعی
-  if [ -n "${IFACE2:-}" ] && command -v nmcli >/dev/null 2>&1; then
-    if nmcli dev wifi connect "$b" password "$p" ifname "$IFACE2" >/dev/null 2>&1; then
-      sleep 5
-      det=$(ip -4 route 2>/dev/null | awk -v dev="$IFACE2" '$0 ~ dev && /proto kernel/ {print $1; exit}')
-      [ -n "$det" ] && sub="$det"
-      nmcli dev disconnect "$IFACE2" >/dev/null 2>&1 || true
-    fi
-  fi
-  # ۲) fallback: gateway پیش‌فرض → /24
-  if [ -z "$sub" ]; then
-    gw=$(ip -4 route 2>/dev/null | awk '/default/ {print $3; exit}')
-    [ -n "$gw" ] && { IFS=. read -r o1 o2 o3 _ <<<"$gw"; sub="${o1}.${o2}.${o3}.0/24"; }
+  local gw sub
+  gw=$(ip -4 route 2>/dev/null | awk '/default/ {print $3; exit}')
+  if [ -n "$gw" ]; then
+    IFS=. read -r o1 o2 o3 _ <<<"$gw"
+    sub="${o1}.${o2}.${o3}.0/24"
   fi
   printf '%s' "${sub:-192.168.1.0/24}"
 }
@@ -1260,7 +1238,7 @@ if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ] && 
     [ -z "$ch" ] && continue
     in_scope "$b" "" || { warn "  $b خارج از scope — رد شد."; continue; }
     # lockout check (resume-aware)
-    wps_is_locked "$b" || true
+    wps_is_locked "$b"
     # ۰) NULL PIN (اولویت بالا)
     if command -v reaver >/dev/null; then
       grep -qF "$b" "$WORK/cracked.txt" 2>/dev/null || {
@@ -1283,7 +1261,6 @@ if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ] && 
         k=$(awk -F"'" '/WPA PSK:/{print $2; exit}' "$WORK/wps-known-$b.txt")
         if [ -n "$k" ]; then
           ok "WPS (known PIN $pin) → $k" && echo "$b|$k|WPS-knownpin" >> "$WORK/cracked.txt"
-          wps_record_pin "$b" "$pin"
           break
         fi
         wps_detect_lockout "$WORK/wps-known-$b.txt" "$b" && break
