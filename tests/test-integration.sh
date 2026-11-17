@@ -122,6 +122,7 @@ echo "-- Scope & authorization --"
 assert_contains "--scope sets Scope line" "Scope: /tmp/scope.txt" bash "$SCRIPT" --scope /tmp/scope.txt --dry-run
 assert_contains "--authorize acknowledges authorization" "Authorization: acknowledged" bash "$SCRIPT" --authorize --dry-run
 assert_contains "no --authorize prints not acknowledged" "Authorization: NOT acknowledged" bash "$SCRIPT" --dry-run
+assert_contains "--allow-all sets Allow-all line" "Allow-all: yes" bash "$SCRIPT" --allow-all --dry-run
 assert_exit "--scope missing file exits 1" 1 env WIFITE4_TEST_MODE=1 bash "$SCRIPT" --authorize --scope /no/such/file.txt
 
 # in_scope() rejection logic (extracted from script)
@@ -164,6 +165,19 @@ else
   echo "    output: $(echo "$ACTIVE_OUT" | head -3)"
 fi
 rm -rf "$ACTIVE_MOCK" "$ACTIVE_SCOPE"
+
+# Active-mode --allow-all without scope: passes the scope gate
+ACTIVE_MOCK2="$(mktemp -d)"
+for t in hcxdumptool airodump-ng hashcat; do printf '#!/usr/bin/env bash\nexit 0\n' > "$ACTIVE_MOCK2/$t" && chmod +x "$ACTIVE_MOCK2/$t"; done
+PATH="$ACTIVE_MOCK2:/usr/bin:/bin" WIFITE4_TEST_MODE=1 bash "$SCRIPT" --allow-all --authorize -t 1 >"$ACTIVE_MOCK2/out.txt" 2>&1 || true
+ACTIVE_OUT2=$(cat "$ACTIVE_MOCK2/out.txt")
+if printf '%s\n' "$ACTIVE_OUT2" | grep -qF "allow-all"; then
+  echo "  PASS: active mode --allow-all passes scope gate"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: --allow-all scope gate"; FAIL=$((FAIL + 1))
+  echo "    output: $(echo "$ACTIVE_OUT2" | head -3)"
+fi
+rm -rf "$ACTIVE_MOCK2"
 
 # --- Summary ---
 echo

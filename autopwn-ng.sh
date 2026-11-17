@@ -4,7 +4,7 @@
 #  استفاده: sudo autopwn-ng [-p profile] [-t seconds] [-i iface] [-w wordlist]
 #           [-d dictdir] [--no-wps] [--no-twin] [--no-post] [--no-harvest]
 #           [--harvest-time N] [--target BSSID] [--auto] [--resume]
-#           [--pmkid-only] [--from-pcap FILE] [--scope FILE] [--authorize]
+#           [--pmkid-only] [--from-pcap FILE] [--scope FILE] [--authorize] [--allow-all]
 #           [--compute-wps-pins BSSID] [--parse-pcap FILE] [--wep] [--no-config-extract] [--no-default-psk] [--wps-state FILE] [--session NAME] [--restore] [--doctor] [--dry-run|--simulate]
 #  پروفایل: stealth | normal | brute
 # ==========================================================================
@@ -32,6 +32,7 @@ OFFLINE=0
 FROM_PCAP=""
 SCOPE_FILE=""
 AUTHORIZED=0
+ALLOW_ALL=0
 WEP=0
 DOCTOR=0
 DEFAULT_PSK=1
@@ -600,6 +601,7 @@ while [ $# -gt 0 ]; do
     --from-pcap) FROM_PCAP="$2"; OFFLINE=1; shift 2;;
     --scope) SCOPE_FILE="$2"; shift 2;;
     --authorize|--i-am-authorized|--yes-i-am-authorized) AUTHORIZED=1; shift;;
+    --allow-all) ALLOW_ALL=1; shift;;
     --restore) RESTORE=1; shift;;
     --session) SESSION="$2"; shift 2;;
     --compute-wps-pins) COMPUTE_WPS_PINS="$2"; shift 2;;
@@ -725,6 +727,7 @@ PLAN
   [ "$RESUME" -eq 1 ] && echo "Mode: resume (skip to phase $SKIP_TO)"
   [ -n "$TARGET" ] && echo "Target: $TARGET"
   if [ -n "$SCOPE_FILE" ]; then echo "Scope: $SCOPE_FILE"; else echo "Scope: (none — all networks in range)"; fi
+  if [ "$ALLOW_ALL" -eq 1 ]; then echo "Allow-all: yes (no scope file)"; fi
   if [ "$AUTHORIZED" -eq 1 ]; then echo "Authorization: acknowledged"; else echo "Authorization: NOT acknowledged (active attacks blocked)"; fi
   [ -n "$IFACE" ] && echo "Interface: $IFACE"
   [ "${DEFAULT_PSK:-1}" -eq 1 ] && echo "Default PSK: enabled (SpeedTouch/Thomson + common + MAC-derived, zero GPU)"
@@ -832,7 +835,19 @@ if [ "$OFFLINE" -ne 1 ] && [ "$DRY_RUN" -ne 1 ]; then
     [ -f "$SCOPE_FILE" ] || { err "فایل scope یافت نشد: $SCOPE_FILE"; exit 1; }
     ok "scope بارگذاری شد: $SCOPE_FILE"
   else
-    warn "هیچ --scope داده نشد: همهٔ شبکه‌های محدوده مجاز تلقی می‌شوند."
+    if [ "$ALLOW_ALL" -eq 1 ]; then
+      ok "--allow-all: همهٔ شبکه‌های محدوده مجاز تلقی می‌شوند."
+    elif [ -t 0 ]; then
+      echo
+      warn "هیچ --scope داده نشد: همهٔ شبکه‌های محدوده مجاز تلقی می‌شوند."
+      read -rp "برای ادامه عبارت 'ALLOW ALL' را تایپ کن: " _ack2
+      if [ "$_ack2" != "ALLOW ALL" ]; then
+        err "اجازهٔ all-networks تأیید نشد. خروج."; exit 1
+      fi
+      ALLOW_ALL=1
+    else
+      err "بدون --scope، برای اجرای حملات فعال باید --allow-all بدهید (اجازهٔ کتبی). خروج."; exit 1
+    fi
   fi
 fi
 

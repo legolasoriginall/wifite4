@@ -179,6 +179,7 @@ echo "-- Scope & authorization --"
 assert_output_contains "--scope sets Scope line" "Scope: /tmp/scope.txt" bash "$SCRIPT" --scope /tmp/scope.txt --dry-run
 assert_output_contains "--authorize acknowledges authorization" "Authorization: acknowledged" bash "$SCRIPT" --authorize --dry-run
 assert_output_contains "no --authorize prints not acknowledged" "Authorization: NOT acknowledged" bash "$SCRIPT" --dry-run
+assert_output_contains "--allow-all sets Allow-all line" "Allow-all: yes" bash "$SCRIPT" --allow-all --dry-run
 
 # in_scope() rejection logic (extracted from script)
 SCOPE_TMP="$(mktemp)"

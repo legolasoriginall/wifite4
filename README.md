@@ -102,7 +102,8 @@ sudo autopwn-ng --simulate              # همان --dry-run
 sudo autopwn-ng --doctor                # بررسی سلامت: وابستگی‌ها، GPU/OpenCL، رابط‌ها، وردلیست‌ها
 sudo autopwn-ng --auto                 # یک کلیک: اسکن + برداشت از همه + کرک + گزارش
   sudo autopwn-ng --pmkid-only           # برداشت کوتاه PMKID (۱۵s)؛ در صورت یافتن مستقیم به کرک
-  sudo autopwn-ng --scope scope.txt --authorize   # محدود به scope + اجازهٔ صریح
+     sudo autopwn-ng --scope scope.txt --authorize   # محدود به scope + اجازهٔ صریح
+   sudo autopwn-ng --allow-all --authorize          # همهٔ شبکه‌ها (نیازمند --allow-all یا تأیید تعاملی)
   sudo autopwn-ng --from-pcap FILE.pcap # حالت offline/crack-only: استخراج + کرک روی pcap موجود (بدون رادیو)
   sudo autopwn-ng --session myrun --restore  # از سرگیری کرک قطع‌شده (hashcat session)
   sudo autopwn-ng --auto  # انتخاب خودکار قوی‌ترین شبکهٔ WPA2 + برداشت + کرک + گزارش
