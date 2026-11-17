@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2034,SC2317  # helpers/vars below are used by eval'd code
+# shellcheck disable=SC2034,SC2317,SC2329  # helpers/vars below are used by eval'd code
 # ==========================================================================
 #  Lightweight unit tests for autopwn-ng.sh
 #  Runs without root or hardware — uses --dry-run/--simulate/--help only.
