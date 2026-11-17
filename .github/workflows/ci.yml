@@ -99,3 +99,8 @@ jobs:
         run: |
           set -euo pipefail
           bash tests/test-rerun.sh
+
+      - name: Installer re-exec test — flags survive sudo
+        run: |
+          set -euo pipefail
+          bash tests/test-installers.sh
