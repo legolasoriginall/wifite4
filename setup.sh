@@ -8,7 +8,7 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG_FILE="/var/log/wifite4-setup.log"
+LOG_FILE="${WIFITE4_PREFIX:-}/var/log/wifite4-setup.log"
 DOWNLOAD_WORDLISTS=1
 DRY_RUN=0
 ONLY_AUTOPWN=0
@@ -156,7 +156,7 @@ run_step() {
 }
 
 verify_install() {
-  local bin=/usr/local/bin/autopwn-ng t
+  local bin="${WIFITE4_PREFIX:-}/usr/local/bin/autopwn-ng" t
   if (( DRY_RUN == 1 )); then
     warn "dry-run: بررسی $bin و ابزارهای همراهش"
     return 0

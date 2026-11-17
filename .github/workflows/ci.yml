@@ -59,7 +59,7 @@ jobs:
           echo "OK: autopwn-ng.sh --parse-pcap"
           bash setup.sh --help >/dev/null
           echo "OK: setup.sh --help"
-          bash setup.sh --only-autopwn >/dev/null
+          WIFITE4_TEST_MODE=1 WIFITE4_PREFIX="$MOCK_DIR/prefix" bash setup.sh --only-autopwn >/dev/null
           echo "OK: setup.sh --only-autopwn"
           bash setup.sh --only-autopwn --dry-run >/dev/null
           echo "OK: setup.sh --only-autopwn --dry-run"

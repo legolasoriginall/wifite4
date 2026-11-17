@@ -40,7 +40,7 @@ ensure_root "$@"
 # ---------------------------------------------------------------- source-file validation
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$REPO_DIR/autopwn-ng.sh"
-DEST="/usr/local/bin/autopwn-ng"
+DEST="${WIFITE4_PREFIX:-}/usr/local/bin/autopwn-ng"
 
 [[ -f "$SRC" ]] || die "فایل منبع پیدا نشد: $SRC"
 [[ -r "$SRC" ]] || die "فایل منبع قابل خواندن نیست: $SRC"
@@ -50,6 +50,7 @@ bash -n "$SRC" || die "خطای سینتکس در $SRC"
 if (( DRY_RUN == 1 )); then
   warn "dry-run: install -m 755 $SRC $DEST"
 else
+  mkdir -p "$(dirname "$DEST")"
   install -m 755 "$SRC" "$DEST"
   ok "autopwn-ng نصب شد: $DEST"
   say "اجرا: sudo autopwn-ng --help"
