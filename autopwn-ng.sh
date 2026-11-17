@@ -927,10 +927,7 @@ if [ "$OFFLINE" -ne 1 ] && [ "$DRY_RUN" -ne 1 ]; then
 fi
 
 # ---------- پاکسازی ----------
-_CLEANED=0
 cleanup(){
-  [ "$_CLEANED" = 1 ] && return
-  _CLEANED=1
   [ -n "${HK_PID:-}" ] && { kill "$HK_PID" 2>/dev/null; wait "$HK_PID" 2>/dev/null; }
   [ -n "${MDK_PID:-}" ] && { kill "$MDK_PID" 2>/dev/null; wait "$MDK_PID" 2>/dev/null; }
   [ -n "${SCAN_PID:-}" ] && { kill "$SCAN_PID" 2>/dev/null; wait "$SCAN_PID" 2>/dev/null; }
@@ -939,23 +936,27 @@ cleanup(){
   pkill -P $$ 2>/dev/null || true
   # فقط اگر فاز ۰ واقعاً رادیو/شبکه را دستکاری کرده باشد، میزبان را بازگردان
   if [ "${HOST_TOUCHED:-0}" -eq 1 ]; then
-    [ -n "${MON:-}" ] && airmon-ng stop "$MON" >/dev/null 2>&1
-    # revert macchanger if applied
-    if [ -n "${ORIG_MAC:-}" ] && [ -n "${MON:-}" ]; then
-      ip link set "$MON" down 2>/dev/null
-      ip link set "$MON" address "$ORIG_MAC" 2>/dev/null
-      ip link set "$MON" up 2>/dev/null
+    if [ -n "${MON:-}" ]; then
+      airmon-ng stop "$MON" >/dev/null 2>&1
+      # revert macchanger if applied
+      if [ -n "${ORIG_MAC:-}" ]; then
+        ip link set "$MON" down 2>/dev/null
+        ip link set "$MON" address "$ORIG_MAC" 2>/dev/null
+        ip link set "$MON" up 2>/dev/null
+      fi
     fi
-    for i in "$IFACE" "$IFACE2"; do [ -n "$i" ] && ip link set "$i" up 2>/dev/null; done
+    for i in "${IFACE:-}" "${IFACE2:-}"; do
+      [ -n "$i" ] && ip link set "$i" up 2>/dev/null
+    done
     systemctl restart NetworkManager >/dev/null 2>&1 || true
   fi
   hr; c "خروجی‌ها: ${WORK:-}"
 }
 trap cleanup EXIT
-trap 'cleanup; exit 129' HUP
-trap 'cleanup; exit 130' INT
-trap 'cleanup; exit 131' QUIT
-trap 'cleanup; exit 143' TERM
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 131' QUIT
+trap 'exit 143' TERM
 
 # ---------- فاز ۰: آماده‌سازی ----------
 if [ "$OFFLINE" -ne 1 ] && command -v airmon-ng >/dev/null 2>&1 && command -v iw >/dev/null 2>&1; then
