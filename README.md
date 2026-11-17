@@ -107,7 +107,8 @@ sudo autopwn-ng --auto                 # یک کلیک: اسکن + برداشت 
      sudo autopwn-ng --scope scope.txt --authorize   # محدود به scope + اجازهٔ صریح
    sudo autopwn-ng --allow-all --authorize          # همهٔ شبکه‌ها (نیازمند --allow-all یا تأیید تعاملی)
   sudo autopwn-ng --from-pcap FILE.pcap # حالت offline/crack-only: استخراج + کرک روی pcap موجود (بدون رادیو)
-  sudo autopwn-ng --session myrun --restore  # از سرگیری کرک قطع‌شده (hashcat session)
+  sudo autopwn-ng --resume  # ادامه از checkpoint؛ session/workload/profile ذخیره‌شده بازیابی می‌شوند
+sudo autopwn-ng --session myrun --restore  # از سرگیری کرک قطع‌شده (hashcat session)
   sudo autopwn-ng --auto  # انتخاب خودکار قوی‌ترین شبکهٔ WPA2 + برداشت + کرک + گزارش
   sudo autopwn-ng --wep  # کرک شبکه‌های WEP (ARP replay / chopchop / fragmentation)
   sudo autopwn-ng --no-config-extract  # غیرفعال‌کردن استخراج پیکربندی محلی
@@ -257,7 +258,9 @@ Workload: 3
 
 ## --resume
 
-گزینه `--resume` اجرای قبلی را از آخرین فاز تکمیل‌شده ادامه می‌دهد. پس از هر فاز موفق، یک فایل checkpoint در `/tmp/autopwn-ng.checkpoint` ذخیره می‌شود که شامل مسیر دایرکتوری کار و شمارهٔ آخرین فاز تکمیل‌شده است.
+گزینه `--resume` اجرای قبلی را از آخرین فاز تکمیل‌شده ادامه می‌دهد. پس از هر فاز موفق، یک فایل checkpoint در `/tmp/autopwn-ng.checkpoint` ذخیره می‌شود که شامل مسیر دایرکتوری کار، شمارهٔ آخرین فاز تکمیل‌شده و مقادیر hashcat است: `SESSION`، `WLIMIT` و `PROFILE`.
+
+هنگام resume، فایل بدون `source` خوانده و اعتبارسنجی می‌شود (فاز عددی، دایرکتوری کار موجود و متعلق به همان کاربر، session/profile با کاراکترهای مجاز، workload بین ۱ تا ۴). مقادیر ذخیره‌شده بر `--session`/`-p` خط فرمان اولویت دارند و در صورت اختلاف، هشدار داده می‌شود.
 
 ```bash
 sudo autopwn-ng --resume

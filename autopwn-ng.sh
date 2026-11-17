@@ -42,6 +42,8 @@ RESTORE=0
 COMPUTE_WPS_PINS=""
 PARSE_PCAP=""
 SESSION="autopwn-ng"
+SESSION_EXPLICIT=0
+PROFILE_EXPLICIT=0
 WLIMIT=3
 CHECKPOINT="/tmp/autopwn-ng.checkpoint"
 PMKID_N=0
@@ -601,7 +603,7 @@ capture_once() {
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    -p) PROFILE="$2"; shift 2;;
+    -p) PROFILE="$2"; PROFILE_EXPLICIT=1; shift 2;;
     -t) CAPTURE="$2"; CAPTURE_EXPLICIT=1; shift 2;;
     -i) IFACE="$2"; shift 2;;
     -I) IFACE2="$2"; shift 2;;
@@ -625,7 +627,10 @@ while [ $# -gt 0 ]; do
     --authorize|--i-am-authorized|--yes-i-am-authorized) AUTHORIZED=1; shift;;
     --allow-all) ALLOW_ALL=1; shift;;
     --restore) RESTORE=1; shift;;
-    --session) SESSION="$2"; shift 2;;
+    --session)
+      SESSION="$2"
+      [[ "$SESSION" =~ ^[A-Za-z0-9._-]+$ ]] || { err "نام نشست نامعتبر است: $SESSION"; exit 1; }
+      SESSION_EXPLICIT=1; shift 2;;
     --compute-wps-pins) COMPUTE_WPS_PINS="$2"; shift 2;;
     --parse-pcap) PARSE_PCAP="$2"; shift 2;;
     --wep) WEP=1; shift;;
@@ -688,30 +693,62 @@ fi
 save_checkpoint() {
   local phase="$1"
   {
-    printf 'CKPT_WORK=%q
-' "$WORK"
-    printf 'CKPT_PHASE=%d
-' "$phase"
+    printf 'CKPT_WORK=%s\n' "$WORK"
+    printf 'CKPT_PHASE=%d\n' "$phase"
+    printf 'CKPT_SESSION=%s\n' "$SESSION"
+    printf 'CKPT_WLIMIT=%d\n' "$WLIMIT"
+    printf 'CKPT_PROFILE=%s\n' "$PROFILE"
   } > "$CHECKPOINT"
+}
+
+# خواندن امن checkpoint (بدون source) + اعتبارسنجی مقادیر
+load_checkpoint() {
+  local key val
+  CKPT_WORK="" CKPT_PHASE="" CKPT_SESSION="" CKPT_WLIMIT="" CKPT_PROFILE=""
+  while IFS='=' read -r key val || [ -n "$key" ]; do
+    case "$key" in
+      CKPT_WORK) CKPT_WORK="$val" ;;
+      CKPT_PHASE) CKPT_PHASE="$val" ;;
+      CKPT_SESSION) CKPT_SESSION="$val" ;;
+      CKPT_WLIMIT) CKPT_WLIMIT="$val" ;;
+      CKPT_PROFILE) CKPT_PROFILE="$val" ;;
+    esac
+  done < "$CHECKPOINT"
+  [[ "$CKPT_PHASE" =~ ^[0-9]+$ ]] || return 1
+  { [ -n "$CKPT_WORK" ] && [ -d "$CKPT_WORK" ] && [ -O "$CKPT_WORK" ]; } || return 1
+  [[ "$CKPT_SESSION" =~ ^[A-Za-z0-9._-]+$ ]] || CKPT_SESSION=""
+  [[ "$CKPT_WLIMIT" =~ ^[1-4]$ ]] || CKPT_WLIMIT=""
+  [[ "$CKPT_PROFILE" =~ ^[A-Za-z0-9._-]+$ ]] || CKPT_PROFILE=""
+  return 0
 }
 
 # ---------- حالت resume ----------
 SKIP_TO=0
 if [ "$RESUME" -eq 1 ]; then
-  if [ -f "$CHECKPOINT" ]; then
-    # shellcheck disable=SC1090
-    . "$CHECKPOINT"
-    if [ -n "${CKPT_WORK:-}" ] && [ -d "$CKPT_WORK" ]; then
-      WORK="$CKPT_WORK"
-      SKIP_TO=$(( ${CKPT_PHASE:-0} + 1 ))
-      ok "ادامه از فاز $SKIP_TO (آخرین فاز تکمیل‌شده: ${CKPT_PHASE:-0})"
-      ok "دایرکتوری کار: $WORK"
-    else
-      warn "دایرکتوری کار در checkpoint پیدا نشد؛ شروع از اول."
-      RESUME=0
+  if [ -f "$CHECKPOINT" ] && load_checkpoint; then
+    WORK="$CKPT_WORK"
+    SKIP_TO=$(( CKPT_PHASE + 1 ))
+    if [ -n "$CKPT_SESSION" ]; then
+      if [ "$SESSION_EXPLICIT" -eq 1 ] && [ "$SESSION" != "$CKPT_SESSION" ]; then
+        warn "نشست checkpoint «$CKPT_SESSION» است، نه «$SESSION» — مقدار checkpoint استفاده می‌شود."
+      fi
+      SESSION="$CKPT_SESSION"
     fi
+    if [ -n "$CKPT_WLIMIT" ] && [ "$CKPT_WLIMIT" -ne "$WLIMIT" ]; then
+      c "workload از checkpoint: $CKPT_WLIMIT (به‌جای $WLIMIT)"
+      WLIMIT="$CKPT_WLIMIT"
+    fi
+    if [ -n "$CKPT_PROFILE" ] && [ "$CKPT_PROFILE" != "$PROFILE" ]; then
+      if [ "$PROFILE_EXPLICIT" -eq 1 ]; then
+        warn "profile checkpoint «$CKPT_PROFILE» است، نه «$PROFILE» — مقدار checkpoint استفاده می‌شود."
+      fi
+      PROFILE="$CKPT_PROFILE"
+    fi
+    ok "ادامه از فاز $SKIP_TO (آخرین فاز تکمیل‌شده: $CKPT_PHASE)"
+    ok "دایرکتوری کار: $WORK"
+    ok "hashcat: session=$SESSION workload=$WLIMIT profile=$PROFILE"
   else
-    warn "فایل checkpoint پیدا نشد؛ شروع از اول."
+    warn "فایل checkpoint پیدا نشد یا معتبر نیست؛ شروع از اول."
     RESUME=0
   fi
 fi

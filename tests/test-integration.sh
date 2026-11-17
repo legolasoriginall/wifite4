@@ -270,6 +270,62 @@ unset RESTORE_MOCK_CALLS
 rm -rf "$RESTORE_MOCK" "$RESTORE_PCAP"
 rm -f /tmp/autopwn-ng.checkpoint
 
+# --- resume checkpoint persists hashcat session/workload/profile ---
+echo
+echo "-- resume checkpoint fields --"
+rm -f /tmp/autopwn-ng.checkpoint
+eval "$(sed -n '/^save_checkpoint() {/,/^}/p' "$SCRIPT")"
+CHECKPOINT="$(mktemp)"
+# shellcheck disable=SC2034  # the four vars are consumed by the eval'd save_checkpoint()
+WORK="/tmp/ckpt-work"
+# shellcheck disable=SC2034
+SESSION="run42"
+# shellcheck disable=SC2034
+WLIMIT=1
+# shellcheck disable=SC2034
+PROFILE="stealth"
+save_checkpoint 3
+if grep -qxF 'CKPT_SESSION=run42' "$CHECKPOINT" \
+   && grep -qxF 'CKPT_WLIMIT=1' "$CHECKPOINT" \
+   && grep -qxF 'CKPT_PROFILE=stealth' "$CHECKPOINT"; then
+  echo "  PASS: save_checkpoint stores session/workload/profile"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: checkpoint missing fields: $(tr '\n' '|' < "$CHECKPOINT")"; FAIL=$((FAIL + 1))
+fi
+rm -f "$CHECKPOINT"
+
+RESUME_WORK="$(mktemp -d)"
+printf 'CKPT_WORK=%s\nCKPT_PHASE=3\nCKPT_SESSION=run42\nCKPT_WLIMIT=1\nCKPT_PROFILE=stealth\n' \
+  "$RESUME_WORK" > /tmp/autopwn-ng.checkpoint
+RESUME_OUT=$(bash "$SCRIPT" --resume --dry-run 2>&1)
+if printf '%s\n' "$RESUME_OUT" | grep -qF 'Session: run42' \
+   && printf '%s\n' "$RESUME_OUT" | grep -qF 'Workload: 1' \
+   && printf '%s\n' "$RESUME_OUT" | grep -qF 'Profile: stealth' \
+   && printf '%s\n' "$RESUME_OUT" | grep -qF 'ادامه از فاز 4'; then
+  echo "  PASS: --resume restores checkpoint session/workload/profile"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: resume did not restore checkpoint fields"; FAIL=$((FAIL + 1))
+  echo "    output: $(printf '%s\n' "$RESUME_OUT" | grep -E 'Session|Workload|Profile' | tr '\n' '|')"
+fi
+
+MISMATCH_OUT=$(bash "$SCRIPT" --resume --session cli-run -p brute --dry-run 2>&1)
+if printf '%s\n' "$MISMATCH_OUT" | grep -qF 'نشست checkpoint' \
+   && printf '%s\n' "$MISMATCH_OUT" | grep -qF 'Session: run42'; then
+  echo "  PASS: --resume prefers the checkpoint session and warns on mismatch"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: resume session mismatch not handled"; FAIL=$((FAIL + 1))
+fi
+
+printf 'CKPT_WORK=%s\nCKPT_PHASE=abc\nCKPT_SESSION=run42\n' "$RESUME_WORK" > /tmp/autopwn-ng.checkpoint
+INVALID_OUT=$(bash "$SCRIPT" --resume --dry-run 2>&1)
+if printf '%s\n' "$INVALID_OUT" | grep -qF 'معتبر نیست'; then
+  echo "  PASS: invalid checkpoint is rejected instead of sourced"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: invalid checkpoint not rejected"; FAIL=$((FAIL + 1))
+fi
+rm -rf "$RESUME_WORK"
+rm -f /tmp/autopwn-ng.checkpoint
+
 # --- cleanup must not touch host networking in dry-run/offline ---
 echo
 echo "-- cleanup leaves host networking alone --"
