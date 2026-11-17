@@ -110,6 +110,22 @@ assert_contains "unknown option prints error" "ناشناس" bash "$SCRIPT" --bo
 assert_exit "-p with no value fails" 1 bash "$SCRIPT" -p
 assert_exit "-t with no value fails" 1 bash "$SCRIPT" -t
 
+# --- Color control ---
+echo
+echo "-- Color control --"
+COLOR_OUT=$(bash "$SCRIPT" --color --dry-run 2>&1)
+if printf '%s' "$COLOR_OUT" | grep -q $'\033'; then
+  echo "  PASS: --color forces ANSI even when piped"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: --color produced no ANSI"; FAIL=$((FAIL + 1))
+fi
+NOCOLOR_OUT=$(bash "$SCRIPT" --no-color --dry-run 2>&1)
+if ! printf '%s' "$NOCOLOR_OUT" | grep -q $'\033'; then
+  echo "  PASS: --no-color emits no ANSI"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: --no-color still emitted ANSI"; FAIL=$((FAIL + 1))
+fi
+
 # --- Dry-run completion message ---
 echo
 echo "-- Dry-run completion --"

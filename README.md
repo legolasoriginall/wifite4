@@ -100,6 +100,7 @@ sudo autopwn-ng -i wlan1 -I wlan2       # اجرای کامل
 sudo autopwn-ng --dry-run               # شبیه‌سازی بدون ابزار
 sudo autopwn-ng --simulate              # همان --dry-run
 sudo autopwn-ng --doctor                # بررسی سلامت: وابستگی‌ها، GPU/OpenCL، رابط‌ها، وردلیست‌ها
+sudo autopwn-ng --color                 # اجبار رنگ حتی در پایپ/لاگ (برای less -R)
 sudo autopwn-ng --no-color              # خروجی ساده بدون رنگ (یا متغیر NO_COLOR=1)
 sudo autopwn-ng --interactive           # اسکن کوتاه + انتخاب هدف با شماره (مثل wifite2)
 sudo autopwn-ng --auto                 # یک کلیک: اسکن + برداشت از همه + کرک + گزارش

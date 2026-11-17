@@ -5,7 +5,7 @@
 #           [-d dictdir] [--no-wps] [--no-twin] [--no-post] [--no-harvest]
 #           [--harvest-time N] [--target BSSID] [--auto] [--resume]
 #           [--pmkid-only] [--from-pcap FILE] [--scope FILE] [--authorize] [--allow-all]
-#           [--compute-wps-pins BSSID] [--parse-pcap FILE] [--wep] [--no-config-extract] [--no-default-psk] [--wps-state FILE] [--session NAME] [--restore] [--doctor] [--no-color] [--interactive] [--dry-run|--simulate]
+#           [--compute-wps-pins BSSID] [--parse-pcap FILE] [--wep] [--no-config-extract] [--no-default-psk] [--wps-state FILE] [--session NAME] [--restore] [--doctor] [--color] [--no-color] [--interactive] [--dry-run|--simulate]
 #  پروفایل: stealth | normal | brute
 # ==========================================================================
 set -uo pipefail
@@ -52,17 +52,24 @@ EAP_N=0
 WORK=""
 HOST_TOUCHED=0
 NO_COLOR_FLAG=0
+FORCE_COLOR=0
 INTERACTIVE=0
 TARGET_ESSID=""
 TARGET_ROWS=""
 
 # ---------- UI: palette + helpers (wifite2-style) ----------
-if [[ -t 1 ]] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then
+ui_palette_on(){
   _c=$'\033[1;36m' _ok=$'\033[1;32m' _warn=$'\033[1;33m' _err=$'\033[1;31m'
   _hr=$'\033[1;35m' _dim=$'\033[2m' _bold=$'\033[1m' _blue=$'\033[1;34m' _mag=$'\033[1;35m'
   _rst=$'\033[0m'
-else
+}
+ui_palette_off(){
   _c='' _ok='' _warn='' _err='' _hr='' _dim='' _bold='' _blue='' _mag='' _rst=''
+}
+if [[ -t 1 ]] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then
+  ui_palette_on
+else
+  ui_palette_off
 fi
 c(){ printf '%s[*]%s %s\n' "$_c" "$_rst" "$*"; }
 ok(){ printf '%s[+]%s %s\n' "$_ok" "$_rst" "$*"; }
@@ -71,8 +78,10 @@ err(){ printf '%s[-]%s %s\n' "$_err" "$_rst" "$*"; }
 rule(){ printf '%s%s%s\n' "$_hr" "────────────────────────────────────────────────────────────" "$_rst"; }
 hr(){ rule; }
 phase(){ printf '\n%s▌%s %s%s%s\n' "$_mag" "$_rst" "$_bold" "$*" "$_rst"; rule; }
+plan_line(){ printf '│ %s%s%s\n' "$_c" "$*" "$_rst"; }
 banner(){
-  local line
+  local i line
+  local -a art_colors=("$_mag" "$_mag" "$_blue" "$_blue" "$_c" "$_c")
   local -a art=(
 '  ██╗    ██╗██╗███████╗██╗████████╗███████╗'
 '  ██║    ██║██║██╔════╝██║╚══██╔══╝██╔════╝'
@@ -82,7 +91,7 @@ banner(){
 '   ╚══╝╚══╝ ╚═╝╚═╝     ╚═╝   ╚═╝   ╚══════╝'
   )
   printf '\n'
-  for line in "${art[@]}"; do printf '%s%s%s\n' "$_mag" "$line" "$_rst"; done
+  for i in "${!art[@]}"; do printf '%s%s%s\n' "${art_colors[i]}" "${art[i]}" "$_rst"; done
   printf '  %s▸ autopwn-ng · wireless attack chain%s\n' "$_dim" "$_rst"
   printf '  %s▸ authorized testing only · wifite4 toolkit%s\n\n' "$_warn" "$_rst"
 }
@@ -618,6 +627,7 @@ while [ $# -gt 0 ]; do
     --dry-run|--simulate) DRY_RUN=1; shift;;
     --doctor) DOCTOR=1; shift;;
     --no-color) NO_COLOR_FLAG=1; shift;;
+    --color) FORCE_COLOR=1; shift;;
     --interactive) INTERACTIVE=1; shift;;
     --auto) AUTO=1; shift;;
     --resume) RESUME=1; shift;;
@@ -643,7 +653,11 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$NO_COLOR_FLAG" -eq 1 ] || [ -n "${NO_COLOR:-}" ]; then
-  _c='' _ok='' _warn='' _err='' _hr='' _dim='' _bold='' _blue='' _mag='' _rst=''
+  ui_palette_off
+elif [ "$FORCE_COLOR" -eq 1 ] || { [[ -t 1 ]] && [ "${TERM:-dumb}" != dumb ]; }; then
+  ui_palette_on
+else
+  ui_palette_off
 fi
 
 if [ -n "$COMPUTE_WPS_PINS" ]; then
@@ -776,25 +790,25 @@ print_plan() {
   banner
   printf '  %sSIMULATION MODE%s — dry-run / --simulate\n' "$_warn" "$_rst"
   printf '%s╭─ %sRUN PLAN%s  %s(dry-run — nothing will run)%s\n' "$_mag" "$_bold" "$_rst" "$_dim" "$_rst"
-  printf '│ %s\n' "Profile: $PROFILE"
-  printf '│ %s\n' "Capture: ${CAPTURE:-120}s"
-  printf '│ %s\n' "Workload: $WLIMIT"
-  printf '│ %s\n' "Session: $SESSION$([ "$RESTORE" -eq 1 ] && printf ' (restore)')"
-  [ "$AUTO" -eq 1 ] && printf '│ %s\n' "Mode: auto (one-click)"
-  [ "$PMKID_ONLY" -eq 1 ] && printf '│ %s\n' "Mode: PMKID-only (fast path, ${CAPTURE}s capture)"
-  [ "$DO_WPS" -eq 1 ] && printf '│ %s\n' "WPS: NULL PIN → common/algorithmic → Pixie Dust → bully (lockout-aware, resume)"
-  [ "$WEP" -eq 1 ] && printf '│ %s\n' "Mode: WEP cracking (ARP replay / chopchop / fragmentation)"
-  [ "$OFFLINE" -eq 1 ] && printf '│ %s\n' "Mode: offline / crack-only (from-pcap: $FROM_PCAP)"
-  [ "$RESUME" -eq 1 ] && printf '│ %s\n' "Mode: resume (skip to phase $SKIP_TO)"
-  [ "$INTERACTIVE" -eq 1 ] && printf '│ %s\n' "Mode: interactive target picker"
-  [ -n "$TARGET" ] && printf '│ %s\n' "Target: $TARGET"
-  if [ -n "$SCOPE_FILE" ]; then printf '│ %s\n' "Scope: $SCOPE_FILE"; else printf '│ %s\n' "Scope: (none — all networks in range)"; fi
-  if [ "$ALLOW_ALL" -eq 1 ]; then printf '│ %s\n' "Allow-all: yes (no scope file)"; fi
-  if [ "$AUTHORIZED" -eq 1 ]; then printf '│ %s\n' "Authorization: acknowledged"; else printf '│ %s\n' "Authorization: NOT acknowledged (active attacks blocked)"; fi
-  [ -n "$IFACE" ] && printf '│ %s\n' "Interface: $IFACE"
-  [ "${DEFAULT_PSK:-1}" -eq 1 ] && printf '│ %s\n' "Default PSK: enabled (SpeedTouch/Thomson + common + MAC-derived, zero GPU)"
-  [ "${CONFIG_EXTRACT:-1}" -eq 1 ] && printf '│ %s\n' "Config extract: enabled (TR-064/UPnP, SNMP, Telnet/SSH, Web, WPS)"
-  [ -n "$WORDLIST" ] && printf '│ %s\n' "Wordlist: $WORDLIST"
+  plan_line "Profile: $PROFILE"
+  plan_line "Capture: ${CAPTURE:-120}s"
+  plan_line "Workload: $WLIMIT"
+  plan_line "Session: $SESSION$([ "$RESTORE" -eq 1 ] && printf ' (restore)')"
+  [ "$AUTO" -eq 1 ] && plan_line "Mode: auto (one-click)"
+  [ "$PMKID_ONLY" -eq 1 ] && plan_line "Mode: PMKID-only (fast path, ${CAPTURE}s capture)"
+  [ "$DO_WPS" -eq 1 ] && plan_line "WPS: NULL PIN → common/algorithmic → Pixie Dust → bully (lockout-aware, resume)"
+  [ "$WEP" -eq 1 ] && plan_line "Mode: WEP cracking (ARP replay / chopchop / fragmentation)"
+  [ "$OFFLINE" -eq 1 ] && plan_line "Mode: offline / crack-only (from-pcap: $FROM_PCAP)"
+  [ "$RESUME" -eq 1 ] && plan_line "Mode: resume (skip to phase $SKIP_TO)"
+  [ "$INTERACTIVE" -eq 1 ] && plan_line "Mode: interactive target picker"
+  [ -n "$TARGET" ] && plan_line "Target: $TARGET"
+  if [ -n "$SCOPE_FILE" ]; then plan_line "Scope: $SCOPE_FILE"; else plan_line "Scope: (none — all networks in range)"; fi
+  if [ "$ALLOW_ALL" -eq 1 ]; then plan_line "Allow-all: yes (no scope file)"; fi
+  if [ "$AUTHORIZED" -eq 1 ]; then plan_line "Authorization: acknowledged"; else plan_line "Authorization: NOT acknowledged (active attacks blocked)"; fi
+  [ -n "$IFACE" ] && plan_line "Interface: $IFACE"
+  [ "${DEFAULT_PSK:-1}" -eq 1 ] && plan_line "Default PSK: enabled (SpeedTouch/Thomson + common + MAC-derived, zero GPU)"
+  [ "${CONFIG_EXTRACT:-1}" -eq 1 ] && plan_line "Config extract: enabled (TR-064/UPnP, SNMP, Telnet/SSH, Web, WPS)"
+  [ -n "$WORDLIST" ] && plan_line "Wordlist: $WORDLIST"
   printf '%s╰──────────────────────────────────────────────────────%s\n' "$_dim" "$_rst"
   printf '\n%s▌%s %sPLANNED EXECUTION%s\n' "$_mag" "$_rst" "$_bold" "$_rst"
   cat <<'PLAN'
@@ -1074,12 +1088,24 @@ collect_targets(){
 # جدول اهداف (ویژگی بصری اصلی، مثل wifite2)
 show_targets(){
   [ -n "${TARGET_ROWS:-}" ] || return 0
-  local i=0 b ch p enc e
+  local i=0 b ch p enc e pc ec
   printf '\n  %s%-3s %-17s %-3s %-5s %-13s %s%s\n' "$_bold" "#" "BSSID" "CH" "PWR" "ENC" "ESSID" "$_rst"
   while IFS='|' read -r b ch p enc e; do
     i=$((i + 1))
-    printf '  %s%2d%s  %-17s %-3s %-5s %-13s %s%s%s\n' \
-      "$_c" "$i" "$_rst" "$b" "$ch" "$p" "${enc:0:13}" "$_ok" "$e" "$_rst"
+    pc="$_ok"
+    if [[ "$p" =~ ^-[0-9]+$ ]]; then
+      (( p < -75 )) && pc="$_warn"
+      (( p < -85 )) && pc="$_err"
+    fi
+    ec="$_ok"
+    case "$enc" in
+      *WPA3*) ec="$_c" ;;
+      *WEP*) ec="$_err" ;;
+      *OPN*|'') ec="$_warn" ;;
+    esac
+    printf '  %s%2d%s  %-17s %s%-3s%s %s%-5s%s %s%-13s%s %s%s%s\n' \
+      "$_c" "$i" "$_rst" "$b" "$_bold" "$ch" "$_rst" "$pc" "$p" "$_rst" \
+      "$ec" "${enc:0:13}" "$_rst" "$_bold" "$e" "$_rst"
   done < <(printf '%s\n' "$TARGET_ROWS")
   printf '  %s%d network(s) discovered%s\n' "$_dim" "$i" "$_rst"
 }
@@ -1604,7 +1630,7 @@ if [ -s "$WORK/cracked.txt" ]; then
   printf '\n%s╭─ %sRESULTS%s\n' "$_mag" "$_bold" "$_rst"
   printf '│ %s%-26s %s%s\n' "$_dim" "SSID" "PASSWORD" "$_rst"
   while IFS='|' read -r _rb _rp _re; do
-    printf '│ %-26s %s%s%s\n' "${_re:-(hidden)}" "$_ok" "$_rp" "$_rst"
+    printf '│ %s%-26s%s %s%s%s\n' "$_c" "${_re:-(hidden)}" "$_rst" "${_bold}${_warn}" "$_rp" "$_rst"
   done < "$WORK/cracked.txt"
   printf '%s╰──────────────────────────────────────────────────────%s\n' "$_dim" "$_rst"
   c "گزارش: $REPORT/summary.md"
