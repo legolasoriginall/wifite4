@@ -1549,13 +1549,12 @@ if [ "$SKIP_TO" -le 7 ] && [ "$DO_POST" -eq 1 ] && [ "$OFFLINE" -ne 1 ] && [ -s 
   if [ "${CONFIG_EXTRACT:-1}" -eq 1 ]; then
     extract_local_config "$b" "$p"
   fi
+  save_checkpoint 7
 else
   if [ "$DO_POST" -eq 1 ] && [ "$OFFLINE" -ne 1 ] && [ -s "$WORK/cracked.txt" ]; then
     warn "nmap یافت نشد — فاز ۶ (post-exploit) رد شد."
   fi
 fi
-
-  save_checkpoint 7
 
 # ---------- فاز ۷: برداشت اعتبارنامهٔ HTTP ----------
 if [ "$SKIP_TO" -le 8 ] && [ "$DO_HARVEST" -eq 1 ] && [ -s "$WORK/cracked.txt" ] && command -v tshark >/dev/null 2>&1; then
