@@ -152,16 +152,17 @@ fi
 
 # Scope filtering in active mode: out-of-scope target -> exit 1 before capture
 ACTIVE_MOCK="$(mktemp -d)"
-for t in hcxdumptool airodump-ng hashcat; do printf '#!/usr/bin/env bash\nexit 0\n' > "$ACTIVE_MOCK/$t" && chmod +x "$ACTIVE_MOCK/$t"; done
+for t in hcxdumptool airodump-ng; do printf '#!/usr/bin/env bash\ntouch "%s/capture_called"\nexit 0\n' "$ACTIVE_MOCK" > "$ACTIVE_MOCK/$t" && chmod +x "$ACTIVE_MOCK/$t"; done
+printf '#!/usr/bin/env bash\nexit 0\n' > "$ACTIVE_MOCK/hashcat" && chmod +x "$ACTIVE_MOCK/hashcat"
 ACTIVE_SCOPE="$(mktemp)"
 printf '11:22:33:44:55:66\n' > "$ACTIVE_SCOPE"
 PATH="$ACTIVE_MOCK:/usr/bin:/bin" WIFITE4_TEST_MODE=1 bash "$SCRIPT" --target AA:BB:CC:DD:EE:FF --scope "$ACTIVE_SCOPE" --authorize >"$ACTIVE_MOCK/out.txt" 2>&1
 ACTIVE_RC=$?
 ACTIVE_OUT=$(cat "$ACTIVE_MOCK/out.txt")
-if [ "$ACTIVE_RC" -eq 1 ] && printf '%s\n' "$ACTIVE_OUT" | grep -qF "خارج از scope"; then
-  echo "  PASS: active mode rejects out-of-scope target"; PASS=$((PASS + 1))
+if [ "$ACTIVE_RC" -eq 1 ] && printf '%s\n' "$ACTIVE_OUT" | grep -qF "خارج از scope" && [ ! -e "$ACTIVE_MOCK/capture_called" ]; then
+  echo "  PASS: active mode rejects out-of-scope target before capture"; PASS=$((PASS + 1))
 else
-  echo "  FAIL: active scope rejection (rc=$ACTIVE_RC)"; FAIL=$((FAIL + 1))
+  echo "  FAIL: active scope rejection or capture leaked (rc=$ACTIVE_RC)"; FAIL=$((FAIL + 1))
   echo "    output: $(echo "$ACTIVE_OUT" | head -3)"
 fi
 rm -rf "$ACTIVE_MOCK" "$ACTIVE_SCOPE"
@@ -192,14 +193,28 @@ mkdir -p "$(dirname "$out")"
 printf 'dummy hash\n' > "$out"
 exit 0
 MOCK
-for t in hcxhashtool aircrack-ng hashcat tshark; do printf '#!/usr/bin/env bash\nexit 0\n' > "$OFFLINE_MOCK/$t" && chmod +x "$OFFLINE_MOCK/$t"; done
-chmod +x "$OFFLINE_MOCK/hcxpcapngtool"
+cat > "$OFFLINE_MOCK/hcxhashtool" <<'MOCK'
+#!/usr/bin/env bash
+in=""; out=""
+while [ $# -gt 0 ]; do case "$1" in -i) in="$2"; shift 2;; -o) out="$2"; shift 2;; *) shift;; esac; done
+[ -n "$out" ] && cp "$in" "$out"
+exit 0
+MOCK
+cat > "$OFFLINE_MOCK/hashcat" <<'MOCK'
+#!/usr/bin/env bash
+touch "$(dirname "$0")/hc_called"
+exit 0
+MOCK
+for t in aircrack-ng tshark; do printf '#!/usr/bin/env bash\nexit 0\n' > "$OFFLINE_MOCK/$t" && chmod +x "$OFFLINE_MOCK/$t"; done
+chmod +x "$OFFLINE_MOCK/hcxpcapngtool" "$OFFLINE_MOCK/hcxhashtool" "$OFFLINE_MOCK/hashcat"
 OFFLINE_PCAP="$(mktemp)"
 printf 'dummy pcap' > "$OFFLINE_PCAP"
 OFFLINE_OUT=$(PATH="$OFFLINE_MOCK:/usr/bin:/bin" bash "$SCRIPT" --from-pcap "$OFFLINE_PCAP" 2>&1)
 OFFLINE_RC=$?
-if [ "$OFFLINE_RC" -eq 0 ] && printf '%s\n' "$OFFLINE_OUT" | grep -qF "فاز ۳"; then
-  echo "  PASS: --from-pcap runs Phase 3 and exits 0"; PASS=$((PASS + 1))
+if [ "$OFFLINE_RC" -eq 0 ] && printf '%s\n' "$OFFLINE_OUT" | grep -qF "فاز ۳" \
+   && printf '%s\n' "$OFFLINE_OUT" | grep -qF "دیکشنری SSID/وندور" \
+   && [ -e "$OFFLINE_MOCK/hc_called" ]; then
+  echo "  PASS: --from-pcap runs crack engine (hashcat) and exits 0"; PASS=$((PASS + 1))
 else
   echo "  FAIL: --from-pcap (rc=$OFFLINE_RC)"; FAIL=$((FAIL + 1))
   echo "    output: $(echo "$OFFLINE_OUT" | head -3)"
