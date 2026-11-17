@@ -769,7 +769,7 @@ PLAN
     5: hashcat -m 22000 -a 3 $HASH '?d?d?d?d?d?d?d?d?d?d'
     6: hashcat -m 22000 -a 3 $HASH '09?d?d?d?d?d?d?d?d?d'
     7: hashcat -m 22000 -a 6 $HASH $WORK/dicts/vendor.txt '?d?d?d?d'
-    8: hashcat -m 22000 -a 0 $HASH <wordlist> -r dive.rule
+    8: hashcat -m 22000 -a 0 $HASH <wordlist> -r OneRuleToRuleThemAll.rule
     E: hashcat -m 5500 $WORK/mschapv2.txt <wordlist>  (Enterprise)
 
 [4] WPS (if DO_WPS and WPS-enabled APs found)
@@ -1191,8 +1191,8 @@ run_hc "موبایل ایرانی" -a 3 '09?d?d?d?d?d?d?d?d?d'
 # لایه ۶: weakpass / hashmob با rule
 for w in "${WORDLISTS[@]:1}"; do
   [ -f "$w" ] || continue
-  if [ -f "$RULES/dive.rule" ]; then
-    run_hc "$(basename "$w") + dive" -a 0 "$w" -r "$RULES/dive.rule"
+  if [ -f "$RULES/OneRuleToRuleThemAll.rule" ]; then
+    run_hc "$(basename "$w") + OneRule" -a 0 "$w" -r "$RULES/OneRuleToRuleThemAll.rule"
   else
     run_hc "$(basename "$w") خام" -a 0 "$w"
   fi

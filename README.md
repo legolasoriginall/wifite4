@@ -15,7 +15,7 @@
 | [`uninstall.sh`](uninstall.sh) | حذف کامل: binaries، directories، rules |
 | [`install/01-install-packages.sh`](install/01-install-packages.sh) | نصب بسته‌های پایه: `aircrack-ng`، `hcxtools`، `hcxdumptool`، `hashcat`، `reaver`، `mdk4`، `bettercap`، `iw`، `xxd`، `jq`، `bully`، `tshark`، `dnsmasq`، `nmap` (`wash` با `reaver`، `kismet` اختیاری) |
 | [`install/02-build-hostapd-mana.sh`](install/02-build-hostapd-mana.sh) | نصب پیش‌نیازهای کامپایل و ساخت `hostapd-mana` و نصب آن در `/usr/local/bin` |
-| [`install/03-download-wordlists.sh`](install/03-download-wordlists.sh) | دانلود `rockyou`، `SecLists`، `Probable-Wordlists`، ruleهای تهاجمی و ساخت `kwp` در `/opt/wordlists` |
+| [`install/03-download-wordlists.sh`](install/03-download-wordlists.sh) | دانلود `rockyou`، `SecLists`، `Probable-Wordlists`، ruleهای تهاجمی در `/opt/wordlists` |
 | [`examples/run-autopwn-ng.sh`](examples/run-autopwn-ng.sh) | نمونه‌ی فراخوانی‌ها: پیش‌فرض، `stealth`، `brute`، هدف مشخص، بدون فازهای بلند |
 
 ---
@@ -81,7 +81,7 @@ sudo bash install/01-install-packages.sh
 # مرحله ۲ — ساخت و نصب hostapd-mana
 sudo bash install/02-build-hostapd-mana.sh
 
-# مرحله ۳ — دانلود وردلیست‌ها و ساخت kwp
+# مرحله ۳ — دانلود وردلیست‌ها و ruleها
 sudo bash install/03-download-wordlists.sh
 
 # مرحله ۴ — نصب autopwn-ng در /usr/local/bin
@@ -169,7 +169,7 @@ sudo autopwn-ng --help
 0. **آماده‌سازی** — انتخاب اینترفیس‌ها، تشخیص GPU برای hashcat، مانیتور مود، رندوم کردن MAC در حالت `stealth`
 1. **برداشت** — `hcxdumptool` برای PMKID/EAPOL/EAP، `mdk4` برای دِاوث، `airodump-ng` برای اسکن موازی
 2. **نرمال‌سازی** — `hcxpcapngtool` و `hcxhashtool` برای استخراج و حذف تکراری هش‌ها
-3. **کرک** — لایه‌لایه با hashcat: دیکشنری مشتق از SSID، `rockyou`، ruleها، ماسک عددی/موبایل ایرانی، هیبرید، keyboard walk، و MSCHAPv2 برای Enterprise
+3. **کرک** — لایه‌لایه با hashcat: دیکشنری مشتق از SSID، `rockyou`، ruleها، ماسک عددی/موبایل ایرانی، هیبرید، و MSCHAPv2 برای Enterprise
 4. **WPS** — Pixie Dust با `reaver` + brute-force با `bully` + اسکن با `wash`
 5. **Evil Twin** — `hostapd-mana` (یا `wifiphisher`) و جمع‌آوری اعتبارنامه
 6. **Post-exploit** — ساخت اسکریپت اتصال به شبکه کرک‌شده + MITM با `bettercap` + اسکن با `nmap`

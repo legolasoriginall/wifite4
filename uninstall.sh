@@ -8,16 +8,8 @@ set -euo pipefail
 KEEP_WORDLISTS=0
 DRY_RUN=0
 
-if [[ -t 1 ]]; then
-  c_reset=$'\033[0m' c_ok=$'\033[32m' c_warn=$'\033[33m' c_err=$'\033[31m' c_info=$'\033[36m'
-else
-  c_reset='' c_ok='' c_warn='' c_err='' c_info=''
-fi
-
-say()  { printf '%s[*]%s %s\n' "$c_info" "$c_reset" "$*"; }
-ok()   { printf '%s[+]%s %s\n' "$c_ok" "$c_reset" "$*"; }
-warn() { printf '%s[!]%s %s\n' "$c_warn" "$c_reset" "$*" >&2; }
-die()  { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*" >&2; exit 1; }
+# shellcheck disable=SC1091
+. "$(dirname "$0")/install/common.sh"
 
 usage() {
   cat <<'EOF'
@@ -30,7 +22,7 @@ usage() {
   bash uninstall.sh --help              همین راهنما
 
 حذف می‌شود:
-  /usr/local/bin/autopwn-ng, hostapd-mana, kwp
+  /usr/local/bin/autopwn-ng, hostapd-mana
   /opt/hostapd-mana
   /opt/wordlists (مگر --keep-wordlists)
   /usr/share/hashcat/rules/OneRuleToRuleThemAll.rule
@@ -51,16 +43,7 @@ while (( $# > 0 )); do
 done
 
 # ---------------------------------------------------------------- root
-if (( EUID != 0 )); then
-  if (( DRY_RUN == 1 )); then
-    warn "dry-run بدون root اجرا می‌شود؛ حذف واقعی به root نیاز دارد."
-  elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    say "دسترسی root لازم است؛ اجرای مجدد با sudo…"
-    exec sudo -n bash "$0" "$@"
-  else
-    die "این اسکریپت به root نیاز دارد: sudo bash uninstall.sh"
-  fi
-fi
+ensure_root "$@"
 
 # ---------------------------------------------------------------- log
 if (( DRY_RUN == 0 )); then
@@ -93,7 +76,6 @@ fi
 
 remove "/usr/local/bin/autopwn-ng" "autopwn-ng"
 remove "/usr/local/bin/hostapd-mana" "hostapd-mana"
-remove "/usr/local/bin/kwp" "kwp"
 remove "/opt/hostapd-mana" "hostapd-mana source/build"
 
 if (( KEEP_WORDLISTS == 0 )); then

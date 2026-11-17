@@ -36,7 +36,7 @@ usage() {
 مراحل:
   1) install/01-install-packages.sh      بسته‌های پایه
   2) install/02-build-hostapd-mana.sh    ساخت و نصب hostapd-mana
-  3) install/03-download-wordlists.sh    دانلود وردلیست‌ها، ruleها و ساخت kwp (با --quick رد می‌شود)
+  3) install/03-download-wordlists.sh    دانلود وردلیست‌ها و ruleها (با --quick رد می‌شود)
   4) install-autopwn-ng.sh    نصب autopwn-ng در /usr/local/bin
 
 گزارش اجرا در /var/log/wifite4-setup.log ذخیره می‌شود.
@@ -46,7 +46,6 @@ EOF
 while (( $# > 0 )); do
   case "$1" in
     --quick)        DOWNLOAD_WORDLISTS=0 ;;
-    --full)         ;;  # backward-compatible no-op (full install is default)
     --dry-run)      DRY_RUN=1 ;;
     --only-autopwn) ONLY_AUTOPWN=1 ;;
     -h|--help)      usage; exit 0 ;;
@@ -195,7 +194,7 @@ else
   run_step "install/02-build-hostapd-mana.sh" "ساخت و نصب hostapd-mana"
 
   if (( DOWNLOAD_WORDLISTS == 1 )); then
-    run_step "install/03-download-wordlists.sh" "دانلود وردلیست‌ها و ساخت kwp"
+    run_step "install/03-download-wordlists.sh" "دانلود وردلیست‌ها و ruleها"
   else
     warn "مرحله‌ی وردلیست‌ها رد شد (--quick)."
   fi
