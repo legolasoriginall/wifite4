@@ -64,31 +64,28 @@ hr(){ printf '%s%s%s\n' "$_hr" "────────────────
 doctor() {
   local pass=0 fail=0 warnn=0
   _check() {
-    # _check NAME CMD [required|optional]
-    local name="$1" cmd="$2" level="${3:-required}"
+    local cmd="$1" level="${2:-required}"
     if command -v "$cmd" >/dev/null 2>&1; then
-      ok "  $name ... OK"
+      ok "  $cmd ... OK"
       pass=$((pass+1))
+    elif [ "$level" = "required" ]; then
+      err "  $cmd ... MISSING (required)"
+      fail=$((fail+1))
     else
-      if [ "$level" = "required" ]; then
-        err "  $name ... MISSING (required)"
-        fail=$((fail+1))
-      else
-        warn "  $name ... missing (optional)"
-        warnn=$((warnn+1))
-      fi
+      warn "  $cmd ... missing (optional)"
+      warnn=$((warnn+1))
     fi
   }
   c "autopwn-ng doctor — health check"
   hr
 
   c "Required tools:"
-  for t in aircrack-ng airmon-ng hcxdumptool hashcat hcxpcapngtool airodump-ng iw macchanger timeout base64; do
-    _check "$t" "$t" required
+  for t in aircrack-ng airmon-ng hcxdumptool hashcat hcxpcapngtool airodump-ng iw; do
+    _check "$t" required
   done
   c "Optional tools:"
-  for t in hcxhashtool mdk4 reaver bettercap hostapd-mana wifiphisher bully wash kismet tshark dnsmasq nmap jq xxd nmcli ip; do
-    _check "$t" "$t" optional
+  for t in hcxhashtool macchanger mdk4 reaver bettercap hostapd-mana wifiphisher bully wash kismet tshark dnsmasq nmap jq xxd nmcli ip; do
+    _check "$t" optional
   done
 
   hr
@@ -104,18 +101,7 @@ doctor() {
       warn "  hashcat backend: no OpenCL/CUDA device detected"
       warnn=$((warnn+1))
     fi
-  else
-    warn "  hashcat not installed — skipping GPU check"
-    warnn=$((warnn+1))
   fi
-  if command -v nvidia-smi >/dev/null 2>&1; then
-    ok "  nvidia-smi: present"
-    pass=$((pass+1))
-  else
-    warn "  nvidia-smi: not found (CPU/OpenCL only)"
-    warnn=$((warnn+1))
-  fi
-
   hr
   c "Wireless interfaces:"
   local ifaces=""
@@ -125,9 +111,9 @@ doctor() {
   if [ -z "$ifaces" ] && command -v ip >/dev/null 2>&1; then
     ifaces=$(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | grep -iE 'wlan|wlp|wifi' || true)
   fi
-  local n
-  if [ -z "$ifaces" ]; then n=0; else n=$(printf '%s\n' "$ifaces" | grep -c .); fi
-  if [ "${n:-0}" -gt 0 ]; then
+  local n=0
+  [ -n "$ifaces" ] && n=$(printf '%s\n' "$ifaces" | grep -c .)
+  if [ "$n" -gt 0 ]; then
     ok "  found $n wireless interface(s): $(printf '%s' "$ifaces" | tr '\n' ' ')"
     pass=$((pass+1))
   else
@@ -138,9 +124,7 @@ doctor() {
   hr
   c "Wordlists:"
   if [ -d "$DICTDIR" ]; then
-    local wc
-    wc=$(find "$DICTDIR" -type f 2>/dev/null | wc -l)
-    ok "  $DICTDIR exists ($wc file(s))"
+    ok "  $DICTDIR exists"
     pass=$((pass+1))
   else
     warn "  $DICTDIR not found"
@@ -164,10 +148,7 @@ doctor() {
 
   hr
   c "Summary: $pass passed, $fail failed, $warnn warnings"
-  if [ "$fail" -gt 0 ]; then
-    return 1
-  fi
-  return 0
+  [ "$fail" -eq 0 ]
 }
 
 handshake_quality() {
