@@ -453,7 +453,7 @@ rm -rf "$PICK_MOCK" "$PICK_SCOPE"
 
 # --- picked target reaches the capture filter and the evil-twin AP ---
 echo
-echo "-- interactive pick feeds capture filter and evil twin --"
+echo "-- interactive picker drives the capture filter end-to-end --"
 TWIN_MOCK="$(mktemp -d)"
 TWIN_HC="$TWIN_MOCK/hc.log"
 TWIN_MANA="$TWIN_MOCK/mana.conf"
@@ -476,7 +476,8 @@ while [ $# -gt 0 ]; do case "$1" in -w) w="$2"; shift 2;; *) shift;; esac; done
 [ -n "$w" ] || exit 0
 {
   printf 'BSSID, First time seen, Last time seen, channel, Speed, Privacy, Cipher, Authentication, Power, # beacons, # IV, LAN IP, ID-length, ESSID, Key\n'
-  printf 'AA:BB:CC:DD:EE:77, 1, 2, 6, 54, WPA2, CCMP, PSK, -40, 1, 0, 0.0.0.0, 9, ChosenNet,\n'
+  printf 'AA:BB:CC:DD:EE:11, 1, 2, 1, 54, WPA2, CCMP, PSK, -35, 1, 0, 0.0.0.0, 8, DecoyNet,\n'
+  printf 'AA:BB:CC:DD:EE:77, 1, 2, 6, 54, WPA2, CCMP, PSK, -60, 1, 0, 0.0.0.0, 9, ChosenNet,\n'
 } > "${w}-01.csv"
 exit 0
 MOCK
@@ -525,7 +526,7 @@ MOCK
 chmod +x "$TWIN_MOCK"/*
 TWIN_SCOPE="$TWIN_MOCK/scope.txt"
 printf 'AA:BB:CC:DD:EE:77\n' > "$TWIN_SCOPE"
-printf '1\n' > "$TWIN_MOCK/input.txt"
+printf '2\n' > "$TWIN_MOCK/input.txt"
 TWIN_HC="$TWIN_HC" TWIN_MANA="$TWIN_MANA" PATH="$TWIN_MOCK:/usr/bin:/bin" \
   WIFITE4_TEST_MODE=1 WIFITE4_CHECKPOINT="$TWIN_MOCK/ckpt" \
   bash "$SCRIPT" --interactive --authorize --scope "$TWIN_SCOPE" --no-default-psk -t 1 \
@@ -535,12 +536,18 @@ for _ in $(seq 1 200); do [ -s "$TWIN_MANA" ] && break; sleep 0.1; done
 kill "$TWIN_PID" 2>/dev/null
 wait "$TWIN_PID" 2>/dev/null
 if grep -q 'bssid=AA:BB:CC:DD:EE:77' "$TWIN_HC" 2>/dev/null \
-   && grep -q 'filtermode=2' "$TWIN_HC" 2>/dev/null \
-   && grep -qx 'ssid=ChosenNet' "$TWIN_MANA" 2>/dev/null; then
-  echo "  PASS: picked BSSID filters capture and picked ESSID feeds the twin"; PASS=$((PASS + 1))
+   && ! grep -q 'bssid=AA:BB:CC:DD:EE:11' "$TWIN_HC" 2>/dev/null \
+   && grep -q 'filtermode=2' "$TWIN_HC" 2>/dev/null; then
+  echo "  PASS: picked row 2 is the only BSSID in the capture filter"; PASS=$((PASS + 1))
 else
-  echo "  FAIL: filter/twin wiring (hc: $(tr '\n' '|' < "$TWIN_HC" 2>/dev/null); twin: $(tr '\n' '|' < "$TWIN_MANA" 2>/dev/null))"
+  echo "  FAIL: capture filter (hc: $(tr '\n' '|' < "$TWIN_HC" 2>/dev/null))"
   echo "    output: $(tail -3 "$TWIN_MOCK/out.txt" 2>/dev/null | tr '\n' '|')"
+  FAIL=$((FAIL + 1))
+fi
+if grep -qx 'ssid=ChosenNet' "$TWIN_MANA" 2>/dev/null; then
+  echo "  PASS: picked row's ESSID reaches the evil-twin AP"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: twin SSID (twin: $(tr '\n' '|' < "$TWIN_MANA" 2>/dev/null))"
   FAIL=$((FAIL + 1))
 fi
 rm -rf "$TWIN_MOCK"
