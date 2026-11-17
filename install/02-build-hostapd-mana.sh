@@ -20,6 +20,8 @@ MANA_DEST="${WIFITE4_PREFIX:-}/usr/local/bin/hostapd-mana"
 
 clone_or_replace "$HOSTAPD_DIR" https://github.com/sensepost/hostapd-mana
 
+# hostapd's make refuses to build without .config (verify_config).
+[ -f "$HOSTAPD_DIR/hostapd/.config" ] || cp "$HOSTAPD_DIR/hostapd/defconfig" "$HOSTAPD_DIR/hostapd/.config"
 make -C "$HOSTAPD_DIR/hostapd" -j"$(nproc)"
 install -m 755 "$HOSTAPD_DIR/hostapd/hostapd" "$MANA_DEST"
 ok "hostapd-mana نصب شد: $MANA_DEST"

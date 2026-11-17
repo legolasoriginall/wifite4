@@ -52,7 +52,8 @@ if [[ "$1" == "clone" ]]; then
     rm -rf "$dir"
     exit 1
   fi
-  mkdir -p "$dir/.git"
+  mkdir -p "$dir/.git" "$dir/hostapd"
+  printf 'CONFIG_DRIVER_NL80211=y\n' > "$dir/hostapd/defconfig"
   exit 0
 fi
 exit 0
