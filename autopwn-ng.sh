@@ -68,6 +68,19 @@ handshake_quality() {
   [ "$mic_ok" -eq 0 ] && HS_OK=0
 }
 
+extract_hashes() {
+  hcxpcapngtool -o "$WORK/raw.hc22000" -E "$WORK/essids.txt" \
+    --eapmschapv2="$WORK/mschapv2.txt" "$CAP" > "$WORK/hcxtool.log" 2>&1
+  hcxhashtool -i "$WORK/raw.hc22000" -o "$HASH" --essid-group >/dev/null 2>&1 \
+    || cp "$WORK/raw.hc22000" "$HASH" 2>/dev/null
+  [ -s "$HASH" ] || { warn "هیچ هش WPA‌ای نبود."; : > "$HASH"; }
+  PMKID_N=$(grep -c '^\*\*\*\*' "$HASH" 2>/dev/null || true)
+  EAPOL_N=$(grep -c 'WPA\*02' "$HASH" 2>/dev/null || true)
+  EAP_N=$(wc -l < "$WORK/mschapv2.txt" 2>/dev/null || true)
+  PMKID_N=${PMKID_N:-0}; EAPOL_N=${EAPOL_N:-0}; EAP_N=${EAP_N:-0}
+  ok "PMKID: $PMKID_N | EAPOL: $EAPOL_N | Enterprise: $EAP_N"
+}
+
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -375,20 +388,7 @@ fi
 # ---------- فاز ۲: نرمال‌سازی ----------
 if [ "$SKIP_TO" -le 3 ]; then
 hr; c "فاز ۲ — استخراج و حذف تکراری"
-hcxpcapngtool -o "$WORK/raw.hc22000" -E "$WORK/essids.txt" \
-  --eapmschapv2="$WORK/mschapv2.txt" "$CAP" > "$WORK/hcxtool.log" 2>&1
-
-hcxhashtool -i "$WORK/raw.hc22000" -o "$HASH" --essid-group >/dev/null 2>&1 \
-  || cp "$WORK/raw.hc22000" "$HASH" 2>/dev/null
-[ -s "$HASH" ] || { warn "هیچ هش WPA‌ای نبود."; : > "$HASH"; }
-
-PMKID_N=$(grep -c '^\*\*\*\*' "$HASH" 2>/dev/null || true)
-EAPOL_N=$(grep -c 'WPA\*02' "$HASH" 2>/dev/null || true)
-EAP_N=$(wc -l < "$WORK/mschapv2.txt" 2>/dev/null || true)
-PMKID_N=${PMKID_N:-0}
-EAPOL_N=${EAPOL_N:-0}
-EAP_N=${EAP_N:-0}
-ok "PMKID: $PMKID_N | EAPOL: $EAPOL_N | Enterprise: $EAP_N"
+extract_hashes
 
 # در حالت PMKID-only، اگر PMKID یافت شد مستقیم به کرک برو (رد WPS/Evil-Twin)
 if [ "$PMKID_ONLY" -eq 1 ] && [ "${PMKID_N:-0}" -gt 0 ]; then
@@ -403,7 +403,8 @@ fi
 fi
 
 # ---------- ارزیابی کیفیت handshake ----------
-
+# (فقط قبل از فاز کرک اجرا می‌شود؛ در resume از فاز ۴ به بعد رد می‌شود)
+if [ "${SKIP_TO:-0}" -le 4 ]; then
 # بازمحاسبهٔ شمارنده‌ها در صورت resume
 if [ "${PMKID_N:-0}" -eq 0 ] && [ -s "${HASH:-}" ]; then
   PMKID_N=$(grep -c '^\*\*\*\*' "$HASH" 2>/dev/null || true)
@@ -433,13 +434,7 @@ if [ "$HS_OK" -ne 1 ]; then
     fi
   fi
   if [ -s "$CAP" ]; then
-    hcxpcapngtool -o "$WORK/raw.hc22000" -E "$WORK/essids.txt" \
-      --eapmschapv2="$WORK/mschapv2.txt" "$CAP" > "$WORK/hcxtool.log" 2>&1
-    hcxhashtool -i "$WORK/raw.hc22000" -o "$HASH" --essid-group >/dev/null 2>&1 \
-      || cp "$WORK/raw.hc22000" "$HASH" 2>/dev/null
-    PMKID_N=$(grep -c '^\*\*\*\*' "$HASH" 2>/dev/null || true)
-    EAPOL_N=$(grep -c 'WPA\*02' "$HASH" 2>/dev/null || true)
-    PMKID_N=${PMKID_N:-0}; EAPOL_N=${EAPOL_N:-0}
+    extract_hashes
     handshake_quality
     c "کیفیت handshake پس از re-capture: $HS_SCORE/3"
   fi
@@ -447,6 +442,8 @@ if [ "$HS_OK" -ne 1 ]; then
     warn "handshake همچنان ناقص است؛ cracking رد می‌شود."
     CRACK_ENABLED=0
   fi
+fi
+
 fi
 
 # ---------- فاز ۳: موتور کرک ----------
