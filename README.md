@@ -13,7 +13,7 @@
 | [`autopwn-ng.sh`](autopwn-ng.sh) | خودِ ابزار: زنجیره‌ی کامل برداشت → کرک → evil twin → post-exploit و تولید گزارش |
 | [`setup.sh`](setup.sh) | نصب خودکار همه‌ی مراحل به ترتیب، با بررسی پیش‌نیازها (root، اینترنت، `git`/`wget`، فضای دیسک، اینترفیس وای‌فای). گزینه‌های `--quick` (بدون وردلیست‌ها) و `--only-autopwn` (فقط autopwn-ng) |
 | [`uninstall.sh`](uninstall.sh) | حذف کامل: binaries، directories، rules |
-| [`install/01-install-packages.sh`](install/01-install-packages.sh) | نصب بسته‌های پایه: `aircrack-ng`، `hcxtools`، `hcxdumptool`، `hashcat`، `reaver`، `mdk4`، `bettercap`، `iw`، `xxd`، `jq`، `bully`، `tshark`، `dnsmasq`، `nmap`، `cowpatty` (`wash` با `reaver`، `kismet` اختیاری) |
+| [`install/01-install-packages.sh`](install/01-install-packages.sh) | نصب بسته‌های پایه: `aircrack-ng`، `hcxtools`، `hcxdumptool`، `hashcat`، `reaver`، `mdk4`، `bettercap`، `iw`، `xxd`، `jq`، `bully`، `tshark`، `dnsmasq`، `nmap` (`wash` با `reaver`، `kismet` اختیاری) |
 | [`install/02-build-hostapd-mana.sh`](install/02-build-hostapd-mana.sh) | نصب پیش‌نیازهای کامپایل و ساخت `hostapd-mana` و نصب آن در `/usr/local/bin` |
 | [`install/03-download-wordlists.sh`](install/03-download-wordlists.sh) | دانلود `rockyou`، `SecLists`، `Probable-Wordlists`، ruleهای تهاجمی و ساخت `kwp` در `/opt/wordlists` |
 | [`examples/run-autopwn-ng.sh`](examples/run-autopwn-ng.sh) | نمونه‌ی فراخوانی‌ها: پیش‌فرض، `stealth`، `brute`، هدف مشخص، بدون فازهای بلند |
@@ -175,7 +175,6 @@ sudo autopwn-ng --help
 6. **Post-exploit** — ساخت اسکریپت اتصال به شبکه کرک‌شده + MITM با `bettercap` + اسکن با `nmap`
 7. **تحلیل بسته‌ها** — `tshark` برای شناسایی Enterprise/WPS/کلاینت‌ها
 8. **شناسایی منفعل** — `kismet` برای کشف شبکه‌های پنهان و کلاینت‌ها
-9. **حملهٔ سریع** — `cowpatty` برای حملهٔ دیکشنری سریع WPA-PSK
 
 ## نکات شناخته‌شده
 
@@ -223,8 +222,7 @@ Workload: 3
     hcxpcapngtool -o $WORK/raw.hc22000 -E $WORK/essids.txt --eapmschapv2=$WORK/mschapv2.txt $CAP
     hcxhashtool -i $WORK/raw.hc22000 -o $HASH --essid-group
 
-[3] Crack (hashcat layers 0-8)
-    0: cowpatty -r $CAP -f <wordlist> -s <essid>
+[3] Crack (hashcat layers 1-8)
     1: hashcat -m 22000 -a 0 $HASH $WORK/dicts/vendor.txt
     ...
 

