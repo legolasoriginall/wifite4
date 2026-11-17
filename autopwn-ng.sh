@@ -56,6 +56,7 @@ FORCE_COLOR=0
 INTERACTIVE=0
 TARGET_ESSID=""
 TARGET_ROWS=""
+TARGET_TOTAL=0
 
 # ---------- UI: palette + helpers (wifite2-style) ----------
 ui_palette_on(){
@@ -1070,10 +1071,11 @@ fi
 
 # جمع‌آوری اهداف از CSV ایرودامپ (مبنای جدول و منوی انتخاب)
 collect_targets(){
-  local csv="${1:-$WORK/scan-01.csv}"
+  local csv="${1:-$WORK/scan-01.csv}" all
   TARGET_ROWS=""
+  TARGET_TOTAL=0
   [ -s "$csv" ] || return 0
-  TARGET_ROWS=$(awk -F',' '
+  all=$(awk -F',' '
     NR > 1 && $1 ~ /^[[:space:]]*[0-9A-Fa-f:]{17}[[:space:]]*$/ {
       b=$1; gsub(/[[:space:]]/, "", b)
       ch=$4; gsub(/[[:space:]]/, "", ch)
@@ -1082,7 +1084,9 @@ collect_targets(){
       e=$14; gsub(/^[[:space:]]+|[[:space:]]+$/, "", e)
       if (e == "") e = "(hidden)"
       printf "%s|%s|%s|%s|%s\n", b, ch, p, enc, e
-    }' "$csv" | sort -u | head -20)
+    }' "$csv" | sort -u)
+  TARGET_TOTAL=$(printf '%s\n' "$all" | grep -c . || true)
+  TARGET_ROWS=$(printf '%s\n' "$all" | head -20)
 }
 
 # جدول اهداف (ویژگی بصری اصلی، مثل wifite2)
@@ -1107,7 +1111,12 @@ show_targets(){
       "$_c" "$i" "$_rst" "$b" "$_bold" "$ch" "$_rst" "$pc" "$p" "$_rst" \
       "$ec" "${enc:0:13}" "$_rst" "$_bold" "$e" "$_rst"
   done < <(printf '%s\n' "$TARGET_ROWS")
-  printf '  %s%d network(s) discovered%s\n' "$_dim" "$i" "$_rst"
+  local total="${TARGET_TOTAL:-$i}"
+  if [ "$total" -gt "$i" ]; then
+    printf '  %s%d networks discovered — showing first %d (truncated)%s\n' "$_dim" "$total" "$i" "$_rst"
+  else
+    printf '  %s%d network(s) discovered%s\n' "$_dim" "$total" "$_rst"
+  fi
 }
 
 # انتخاب تعاملی هدف با شماره (--interactive)

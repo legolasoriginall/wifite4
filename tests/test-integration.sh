@@ -110,6 +110,30 @@ assert_contains "unknown option prints error" "ناشناس" bash "$SCRIPT" --bo
 assert_exit "-p with no value fails" 1 bash "$SCRIPT" -p
 assert_exit "-t with no value fails" 1 bash "$SCRIPT" -t
 
+# --- Targets table truncation ---
+echo
+echo "-- Targets table truncation --"
+TARGETS_CSV="$(mktemp)"
+printf 'BSSID, First time seen, Last time seen, channel, Speed, Privacy, Cipher, Authentication, Power, # beacons, # IV, LAN IP, ID-length, ESSID, Key\n' > "$TARGETS_CSV"
+for n in $(seq 1 25); do
+  printf 'AA:BB:CC:00:00:%02X, 1, 2, 6, 54, WPA2, CCMP, PSK, -50, 10, 0, 0.0.0.0, 5, Net%02d,\n' "$n" "$n" >> "$TARGETS_CSV"
+done
+eval "$(sed -n '/^collect_targets(){/,/^}/p' "$SCRIPT")"
+eval "$(sed -n '/^show_targets(){/,/^}/p' "$SCRIPT")"
+_c=''; _ok=''; _warn=''; _err=''; _rst=''; _dim=''; _bold=''
+collect_targets "$TARGETS_CSV"
+TARGETS_OUT=$(show_targets)
+TARGETS_ROWS=$(printf '%s\n' "$TARGETS_OUT" | grep -cE '^  +[0-9]+ +[0-9A-F]{2}:' || true)
+if printf '%s\n' "$TARGETS_OUT" | grep -qF '25 networks discovered' \
+   && printf '%s\n' "$TARGETS_OUT" | grep -qF 'first 20 (truncated)' \
+   && [ "$TARGETS_ROWS" -eq 20 ]; then
+  echo "  PASS: table shows the real total and truncates to 20 rows"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: truncation summary wrong (rows=$TARGETS_ROWS)"; FAIL=$((FAIL + 1))
+  echo "    output: $(printf '%s\n' "$TARGETS_OUT" | tail -2 | tr '\n' '|')"
+fi
+rm -f "$TARGETS_CSV"
+
 # --- Color control ---
 echo
 echo "-- Color control --"
