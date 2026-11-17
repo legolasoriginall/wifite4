@@ -596,7 +596,7 @@ while [ $# -gt 0 ]; do
     --auto) AUTO=1; shift;;
     --resume) RESUME=1; shift;;
     --pmkid-only) PMKID_ONLY=1; shift;;
-    --from-pcap|--pcap) FROM_PCAP="$2"; OFFLINE=1; shift 2;;
+    --from-pcap) FROM_PCAP="$2"; OFFLINE=1; shift 2;;
     --scope) SCOPE_FILE="$2"; shift 2;;
     --authorize|--i-am-authorized|--yes-i-am-authorized) AUTHORIZED=1; shift;;
     --restore) RESTORE=1; shift;;
@@ -802,15 +802,14 @@ PLAN
 
 [ "$DRY_RUN" = 1 ] && { print_plan; exit 0; }
 
-if [ "$OFFLINE" -ne 1 ]; then
+command -v hashcat >/dev/null || warn "hashcat نصب نیست؛ cracking غیرفعال می‌شود."
+if [ "$OFFLINE" -eq 1 ]; then
+  command -v hcxpcapngtool >/dev/null || warn "hcxpcapngtool نصب نیست؛ استخراج غیرفعال می‌شود."
+else
   (( EUID == 0 )) || { err "با sudo اجرا کن."; exit 1; }
-  command -v hashcat >/dev/null || warn "hashcat نصب نیست؛ cracking غیرفعال می‌شود."
   command -v hcxdumptool >/dev/null || warn "hcxdumptool نصب نیست؛ برداشت غیرفعال می‌شود."
   command -v iw >/dev/null || warn "iw نصب نیست؛ آماده‌سازی رادیو غیرفعال می‌شود."
   command -v mdk4 >/dev/null || warn "mdk4 نصب نیست؛ دِاوث ضعیف‌تر می‌شود."
-else
-  command -v hashcat >/dev/null || warn "hashcat نصب نیست؛ cracking غیرفعال می‌شود."
-  command -v hcxpcapngtool >/dev/null || warn "hcxpcapngtool نصب نیست؛ استخراج غیرفعال می‌شود."
 fi
 
 # ---------- اعتبارسنجی scope و اجازهٔ صریح ----------
@@ -913,10 +912,10 @@ if [ "$OFFLINE" -ne 1 ] && command -v airmon-ng >/dev/null 2>&1 && command -v iw
     ok "MAC رندوم شد."
   fi
 else
-  if [ "$OFFLINE" -ne 1 ]; then
-    warn "airmon-ng یا iw یافت نشد — فاز ۰ (آماده‌سازی رادیو) رد شد."
-  else
+  if [ "$OFFLINE" -eq 1 ]; then
     c "حالت offline/crack-only: فاز ۰ (radio) رد شد."
+  else
+    warn "airmon-ng یا iw یافت نشد — فاز ۰ (آماده‌سازی رادیو) رد شد."
   fi
   MON=""
   DO_TWIN=0
