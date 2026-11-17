@@ -48,6 +48,7 @@ PMKID_N=0
 EAPOL_N=0
 EAP_N=0
 WORK=""
+HOST_TOUCHED=0
 NO_COLOR_FLAG=0
 INTERACTIVE=0
 TARGET_ESSID=""
@@ -884,15 +885,18 @@ cleanup(){
   [ -n "${TWIN_PID:-}" ] && { kill "$TWIN_PID" 2>/dev/null; wait "$TWIN_PID" 2>/dev/null; }
   # kill any orphaned child processes (mdk4, airodump-ng, hcxdumptool, ...)
   pkill -P $$ 2>/dev/null || true
-  [ -n "${MON:-}" ] && airmon-ng stop "$MON" >/dev/null 2>&1
-  # revert macchanger if applied
-  if [ -n "${ORIG_MAC:-}" ] && [ -n "${MON:-}" ]; then
-    ip link set "$MON" down 2>/dev/null
-    ip link set "$MON" address "$ORIG_MAC" 2>/dev/null
-    ip link set "$MON" up 2>/dev/null
+  # فقط اگر فاز ۰ واقعاً رادیو/شبکه را دستکاری کرده باشد، میزبان را بازگردان
+  if [ "${HOST_TOUCHED:-0}" -eq 1 ]; then
+    [ -n "${MON:-}" ] && airmon-ng stop "$MON" >/dev/null 2>&1
+    # revert macchanger if applied
+    if [ -n "${ORIG_MAC:-}" ] && [ -n "${MON:-}" ]; then
+      ip link set "$MON" down 2>/dev/null
+      ip link set "$MON" address "$ORIG_MAC" 2>/dev/null
+      ip link set "$MON" up 2>/dev/null
+    fi
+    for i in "$IFACE" "$IFACE2"; do [ -n "$i" ] && ip link set "$i" up 2>/dev/null; done
+    systemctl restart NetworkManager >/dev/null 2>&1 || true
   fi
-  for i in "$IFACE" "$IFACE2"; do [ -n "$i" ] && ip link set "$i" up 2>/dev/null; done
-  systemctl restart NetworkManager >/dev/null 2>&1 || true
   hr; c "خروجی‌ها: ${WORK:-}"
 }
 trap cleanup EXIT
@@ -930,6 +934,7 @@ if [ "$OFFLINE" -ne 1 ] && command -v airmon-ng >/dev/null 2>&1 && command -v iw
     warn "hashcat یافت نشد؛ تشخیص GPU رد شد."
   fi
 
+  HOST_TOUCHED=1
   airmon-ng check kill >/dev/null 2>&1
   BEFORE=$(iw dev | awk '/Interface/{print $2}')
   airmon-ng start "$IFACE" >/dev/null 2>&1

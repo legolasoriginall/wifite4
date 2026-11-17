@@ -270,6 +270,48 @@ unset RESTORE_MOCK_CALLS
 rm -rf "$RESTORE_MOCK" "$RESTORE_PCAP"
 rm -f /tmp/autopwn-ng.checkpoint
 
+# --- cleanup must not touch host networking in dry-run/offline ---
+echo
+echo "-- cleanup leaves host networking alone --"
+CLEAN_MOCK="$(mktemp -d)"
+CLEAN_LOG="$CLEAN_MOCK/host-calls.log"
+for t in systemctl ip airmon-ng; do
+  printf '#!/usr/bin/env bash\nprintf "%%s %%s\\n" "%s" "$*" >> "%s"\nexit 0\n' \
+    "$t" "$CLEAN_LOG" > "$CLEAN_MOCK/$t"
+  chmod +x "$CLEAN_MOCK/$t"
+done
+cat > "$CLEAN_MOCK/hcxpcapngtool" <<'MOCK'
+#!/usr/bin/env bash
+out=""
+while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -E) shift 2;; --eapmschapv2=*) shift;; *) shift;; esac; done
+mkdir -p "$(dirname "$out")"; printf 'dummy hash\n' > "$out"
+exit 0
+MOCK
+cat > "$CLEAN_MOCK/hcxhashtool" <<'MOCK'
+#!/usr/bin/env bash
+in=""; out=""
+while [ $# -gt 0 ]; do case "$1" in -i) in="$2"; shift 2;; -o) out="$2"; shift 2;; *) shift;; esac; done
+[ -n "$out" ] && cp "$in" "$out"
+exit 0
+MOCK
+for t in hashcat aircrack-ng tshark; do printf '#!/usr/bin/env bash\nexit 0\n' > "$CLEAN_MOCK/$t"; done
+chmod +x "$CLEAN_MOCK/hcxpcapngtool" "$CLEAN_MOCK/hcxhashtool" "$CLEAN_MOCK/hashcat" "$CLEAN_MOCK/aircrack-ng" "$CLEAN_MOCK/tshark"
+CLEAN_PCAP="$(mktemp)"
+printf 'dummy pcap' > "$CLEAN_PCAP"
+PATH="$CLEAN_MOCK:/usr/bin:/bin" bash "$SCRIPT" --dry-run >/dev/null 2>&1
+CLEAN_DRY_RC=$?
+PATH="$CLEAN_MOCK:/usr/bin:/bin" bash "$SCRIPT" --from-pcap "$CLEAN_PCAP" >/dev/null 2>&1
+CLEAN_OFF_RC=$?
+CLEAN_CALLS="$(cat "$CLEAN_LOG" 2>/dev/null || true)"
+if [ "$CLEAN_DRY_RC" -eq 0 ] && [ "$CLEAN_OFF_RC" -eq 0 ] && [ -z "$CLEAN_CALLS" ]; then
+  echo "  PASS: dry-run/offline cleanup calls no systemctl/ip/airmon-ng"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: cleanup touched host networking (dry=$CLEAN_DRY_RC, offline=$CLEAN_OFF_RC)"
+  echo "    calls: $(printf '%s' "$CLEAN_CALLS" | tr '\n' '|')"; FAIL=$((FAIL + 1))
+fi
+rm -rf "$CLEAN_MOCK" "$CLEAN_PCAP"
+rm -f /tmp/autopwn-ng.checkpoint
+
 # --- Summary ---
 echo
 echo "==============================="
