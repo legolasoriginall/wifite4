@@ -395,6 +395,62 @@ rm -rf "$FORGED_DIR"
 rm -rf "$RESUME_WORK"
 rm -f "$WIFITE4_CHECKPOINT"
 
+# --- interactive pick: scope/auth gate before filtered capture ---
+echo
+echo "-- interactive picker scope/authorization gate --"
+PICK_MOCK="$(mktemp -d)"
+PICK_CALLS="$PICK_MOCK/hc-calls.log"
+cat > "$PICK_MOCK/iw" <<'MOCK'
+#!/usr/bin/env bash
+case "$*" in
+  dev) printf ' phy#0\n\tInterface wlan0\n' ;;
+  *" info") printf '\ttype monitor\n' ;;
+  *) : ;;
+esac
+exit 0
+MOCK
+printf '#!/usr/bin/env bash\nexit 0\n' > "$PICK_MOCK/airmon-ng"
+cat > "$PICK_MOCK/airodump-ng" <<'MOCK'
+#!/usr/bin/env bash
+w=""
+while [ $# -gt 0 ]; do case "$1" in -w) w="$2"; shift 2;; *) shift;; esac; done
+[ -n "$w" ] || exit 0
+{
+  printf 'BSSID, First time seen, Last time seen, channel, Speed, Privacy, Cipher, Authentication, Power, # beacons, # IV, LAN IP, ID-length, ESSID, Key\n'
+  printf 'AA:BB:CC:DD:EE:01, 1, 2, 6, 54, WPA2, CCMP, PSK, -40, 1, 0, 0.0.0.0, 4, InNet,\n'
+  printf 'AA:BB:CC:DD:EE:02, 1, 2, 11, 54, WPA2, CCMP, PSK, -60, 1, 0, 0.0.0.0, 4, OutNet,\n'
+} > "${w}-01.csv"
+exit 0
+MOCK
+cat > "$PICK_MOCK/hcxdumptool" <<'MOCK'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$PICK_CALLS"
+exit 0
+MOCK
+for t in hashcat aircrack-ng tshark hcxhashtool; do printf '#!/usr/bin/env bash\nexit 0\n' > "$PICK_MOCK/$t"; done
+chmod +x "$PICK_MOCK"/*
+PICK_SCOPE="$(mktemp)"
+printf 'AA:BB:CC:DD:EE:01\n' > "$PICK_SCOPE"
+printf '2\n' | PICK_CALLS="$PICK_CALLS" PATH="$PICK_MOCK:/usr/bin:/bin" WIFITE4_TEST_MODE=1 WIFITE4_CHECKPOINT="$PICK_MOCK/ckpt" \
+  bash "$SCRIPT" --interactive --authorize --scope "$PICK_SCOPE" -t 1 > "$PICK_MOCK/out1.txt" 2>&1
+PICK_RC1=$?
+PICK_OUT1=$(cat "$PICK_MOCK/out1.txt")
+printf '2\n' | PICK_CALLS="$PICK_CALLS" PATH="$PICK_MOCK:/usr/bin:/bin" WIFITE4_TEST_MODE=1 WIFITE4_CHECKPOINT="$PICK_MOCK/ckpt" \
+  bash "$SCRIPT" --interactive --scope "$PICK_SCOPE" -t 1 > "$PICK_MOCK/out2.txt" 2>&1
+PICK_RC2=$?
+if [ "$PICK_RC1" -eq 1 ] && printf '%s\n' "$PICK_OUT1" | grep -qF 'خارج از scope' \
+   && [ ! -e "$PICK_CALLS" ]; then
+  echo "  PASS: out-of-scope pick aborts before hcxdumptool"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: out-of-scope pick (rc=$PICK_RC1, calls=$(tr '\n' '|' < "$PICK_CALLS" 2>/dev/null))"; FAIL=$((FAIL + 1))
+fi
+if [ "$PICK_RC2" -eq 1 ] && [ ! -e "$PICK_CALLS" ]; then
+  echo "  PASS: interactive run without --authorize never captures"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: authorization gate before capture (rc=$PICK_RC2)"; FAIL=$((FAIL + 1))
+fi
+rm -rf "$PICK_MOCK" "$PICK_SCOPE"
+
 # --- cleanup must not touch host networking in dry-run/offline ---
 echo
 echo "-- cleanup leaves host networking alone --"

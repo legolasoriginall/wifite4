@@ -1191,9 +1191,6 @@ select_target(){
 
 # ---------- فاز ۱: برداشت ----------
 if [ "$SKIP_TO" -le 2 ] && [ "$OFFLINE" -ne 1 ] && command -v hcxdumptool >/dev/null 2>&1 && command -v airodump-ng >/dev/null 2>&1; then
-  if [ -n "${TARGET:-}" ] && ! in_scope "$TARGET" ""; then
-    err "هدف $TARGET خارج از scope است. خروج."; exit 1
-  fi
 phase "فاز ۱ — برداشت PMKID + EAPOL + EAP برای ${CAPTURE} ثانیه"
 
 # انتخاب تعاملی هدف: اسکن کوتاه، جدول، سپس برداشت فیلترشده
@@ -1209,6 +1206,13 @@ if [ "$INTERACTIVE" -eq 1 ] && [ -z "$TARGET" ] && command -v airodump-ng >/dev/
   fi
 fi
 
+# گیت نهایی scope/مجوز پیش از برداشت فیلترشده
+if [ "$AUTHORIZED" -ne 1 ]; then
+  err "حملات فعال نیازمند --authorize هستند (اجازهٔ کتبی). خروج."; exit 1
+fi
+if [ -n "${TARGET:-}" ] && ! in_scope "$TARGET" "$TARGET_ESSID"; then
+  err "هدف $TARGET خارج از scope است. خروج."; exit 1
+fi
 capture_once || exit 1
 
 # دِاوث دوره‌ای با mdk4 برای اجبار به reassociation (در PMKID-only غیرفعال)
