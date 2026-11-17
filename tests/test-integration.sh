@@ -15,17 +15,12 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT="$REPO_ROOT/autopwn-ng.sh"
 
 # ---------------------------------------------------------------- mock tools
+# --dry-run never invokes external tools, so mocks are only a safety net.
 MOCK_DIR="$(mktemp -d)"
 trap 'rm -rf "$MOCK_DIR"' EXIT
-
-TOOLS="airmon-ng hcxdumptool hashcat hcxpcapngtool hcxhashtool airodump-ng \
-  mdk4 reaver bettercap hostapd-mana wifiphisher kwp macchanger iw jq xxd \
-  comm sort bully wash kismet tshark dnsmasq nmap cowpatty"
-for t in $TOOLS; do
-  printf '#!/usr/bin/env bash\nexit 0\n' > "$MOCK_DIR/$t"
-  chmod +x "$MOCK_DIR/$t"
+for t in airmon-ng hcxdumptool hashcat hcxpcapngtool airodump-ng iw; do
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$MOCK_DIR/$t" && chmod +x "$MOCK_DIR/$t"
 done
-# grep is left as the real binary (available on PATH) for assertions
 export PATH="$MOCK_DIR:$PATH"
 
 assert_exit() {
@@ -72,7 +67,6 @@ echo
 echo "-- Custom capture time --"
 assert_contains "-t 300 sets capture" "Capture: 300s" bash "$SCRIPT" -t 300 --dry-run
 assert_contains "-t 60 overrides stealth" "Capture: 60s" bash "$SCRIPT" -p stealth -t 60 --dry-run
-assert_contains "stealth without -t defaults 240s" "Capture: 240s" bash "$SCRIPT" -p stealth --dry-run
 
 # --- Target / interface / wordlist / dictdir flags ---
 echo

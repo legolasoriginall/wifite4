@@ -55,13 +55,31 @@ jobs:
           echo "OK: autopwn-ng.sh --harvest-time 10 --dry-run"
           bash autopwn-ng.sh --help >/dev/null
           echo "OK: autopwn-ng.sh --help"
+          bash autopwn-ng.sh --parse-pcap /dev/null >/dev/null 2>&1 || true
+          echo "OK: autopwn-ng.sh --parse-pcap"
           bash setup.sh --help >/dev/null
           echo "OK: setup.sh --help"
           bash setup.sh --dry-run >/dev/null
           echo "OK: setup.sh --dry-run"
+          bash setup.sh --quick --dry-run >/dev/null
+          echo "OK: setup.sh --quick --dry-run"
+          bash install-autopwn-ng.sh --help >/dev/null
+          echo "OK: install-autopwn-ng.sh --help"
+          bash install-autopwn-ng.sh --dry-run >/dev/null
+          echo "OK: install-autopwn-ng.sh --dry-run"
 
           echo "✓ Mock-mode syntax and parsing checks passed"
           rm -rf "$MOCK_DIR"
+
+      - name: Install path smoke test (dry-run)
+        run: |
+          set -euo pipefail
+          bash setup.sh --dry-run
+          echo "OK: setup.sh --dry-run"
+          bash setup.sh --quick --dry-run
+          echo "OK: setup.sh --quick --dry-run"
+          bash install-autopwn-ng.sh --dry-run
+          echo "OK: install-autopwn-ng.sh --dry-run"
 
       - name: Unit tests — argument parsing and profile selection
         run: |

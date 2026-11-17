@@ -11,9 +11,9 @@
 | مسیر | توضیح |
 |---|---|
 | [`autopwn-ng.sh`](autopwn-ng.sh) | خودِ ابزار: زنجیره‌ی کامل برداشت → کرک → evil twin → post-exploit و تولید گزارش |
-| [`setup.sh`](setup.sh) | نصب خودکار همه‌ی مراحل به ترتیب، با بررسی پیش‌نیازها (root، اینترنت، `git`/`wget`، فضای دیسک، اینترفیس وای‌فای). گزینه‌های `--full` (پیش‌فرض، شامل وردلیست‌ها) و `--quick` (بدون وردلیست‌ها) |
+| [`setup.sh`](setup.sh) | نصب خودکار همه‌ی مراحل به ترتیب، با بررسی پیش‌نیازها (root، اینترنت، `git`/`wget`، فضای دیسک، اینترفیس وای‌فای). گزینه‌های `--quick` (بدون وردلیست‌ها) و `--only-autopwn` (فقط autopwn-ng) |
 | [`uninstall.sh`](uninstall.sh) | حذف کامل: binaries، directories، rules |
-| [`install/01-install-packages.sh`](install/01-install-packages.sh) | نصب بسته‌های پایه: `aircrack-ng`، `hcxtools`، `hcxdumptool`، `hashcat`، `reaver`، `mdk4`، `bettercap`، `iw`، `xxd`، `jq`، `bully`، `wash`، `kismet`، `tshark`، `dnsmasq`، `nmap`، `cowpatty` |
+| [`install/01-install-packages.sh`](install/01-install-packages.sh) | نصب بسته‌های پایه: `aircrack-ng`، `hcxtools`، `hcxdumptool`، `hashcat`، `reaver`، `mdk4`، `bettercap`، `iw`، `xxd`، `jq`، `bully`، `tshark`، `dnsmasq`، `nmap`، `cowpatty` (`wash` با `reaver`، `kismet` اختیاری) |
 | [`install/02-build-hostapd-mana.sh`](install/02-build-hostapd-mana.sh) | نصب پیش‌نیازهای کامپایل و ساخت `hostapd-mana` و نصب آن در `/usr/local/bin` |
 | [`install/03-download-wordlists.sh`](install/03-download-wordlists.sh) | دانلود `rockyou`، `SecLists`، `Probable-Wordlists`، ruleهای تهاجمی و ساخت `kwp` در `/opt/wordlists` |
 | [`examples/run-autopwn-ng.sh`](examples/run-autopwn-ng.sh) | نمونه‌ی فراخوانی‌ها: پیش‌فرض، `stealth`، `brute`، هدف مشخص، بدون فازهای بلند |
@@ -33,13 +33,14 @@
 
 ```bash
 sudo bash setup.sh                  # نصب کامل (پیش‌فرض، شامل وردلیست‌ها)
-  sudo bash setup.sh --full           # نصب کامل، شامل دانلود وردلیست‌ها
-  sudo bash setup.sh --quick          # بدون مرحله‌ی دانلود وردلیست‌ها
-bash setup.sh --dry-run             # فقط بررسی پیش‌نیازها و نمایش مراحل، بدون تغییر سیستم
+    sudo bash setup.sh --quick          # بدون مرحله‌ی دانلود وردلیست‌ها
+  sudo bash setup.sh --only-autopwn   # فقط نصب مجدد autopwn-ng (بدون بسته‌ها/وردلیست)
+  bash setup.sh --dry-run             # فقط بررسی پیش‌نیازها و نمایش مراحل، بدون تغییر سیستم
 bash setup.sh --help                # راهنما
 ```
 
-`setup.sh` پیش از هر کاری root، وجود `apt-get`، دسترسی به اینترنت، `git`/`wget`/`curl`، فضای دیسک و تعداد اینترفیس‌های وای‌فای را بررسی می‌کند، ابزارهای پایه‌ی جاافتاده را نصب می‌کند و در صورت شکست هر مرحله متوقف می‌شود. گزارش اجرا در `/var/log/wifite4-setup.log` ذخیره می‌شود.
+  `setup.sh` پیش از هر کاری root، وجود `apt-get`، دسترسی به اینترنت، `git`/`wget`/`curl`، فضای دیسک و تعداد اینترفیس‌های وای‌فای را بررسی می‌کند، ابزارهای پایه‌ی جاافتاده را نصب می‌کند و در صورت شکست هر مرحله متوقف می‌شود. گزارش اجرا در `/var/log/wifite4-setup.log` ذخیره می‌شود.
+  - فراخوانی‌های `apt-get` با `-o APT::Sandbox::User=root` انجام می‌شوند تا در کانتینرها و user namespaceهای محدود (بدون امتیاز) نیز کار کنند.
 
 اجرای مرحله‌به‌مرحله (اگر ترتیب دستی می‌خواهی):
 
@@ -47,15 +48,16 @@ bash setup.sh --help                # راهنما
 sudo bash install/01-install-packages.sh
 sudo bash install/02-build-hostapd-mana.sh
 sudo bash install/03-download-wordlists.sh
-sudo install -m 755 autopwn-ng.sh /usr/local/bin/autopwn-ng
+sudo bash install-autopwn-ng.sh
 ```
 
 ## چک‌لیست ترتیب اجرای اسکریپت‌ها
 
 <|start|> فایل | توضیح |
 |------|--------|
-| [`setup.sh`](setup.sh) | نصب خودکار (کامل با `--full` یا سریع با `--quick`) + بررسی پیش‌نیازها |
+| [`setup.sh`](setup.sh) | نصب خودکار (کامل یا سریع با `--quick`، یا فقط autopwn-ng با `--only-autopwn`) + بررسی پیش‌نیازها |
 | [`uninstall.sh`](uninstall.sh) | حذف کامل: binaries + directories + rules |
+| [`install-autopwn-ng.sh`](install-autopwn-ng.sh) | نصب autopwn-ng در /usr/local/bin (اعتبارسنجی منبع، `bash -n`) — گزینه‌های `--dry-run` / `--help` |
 
 ### روش ۱: نصب خودکار (توصیه‌شده)
 
@@ -83,7 +85,10 @@ sudo bash install/02-build-hostapd-mana.sh
 sudo bash install/03-download-wordlists.sh
 
 # مرحله ۴ — نصب autopwn-ng در /usr/local/bin
-sudo install -m 755 autopwn-ng.sh /usr/local/bin/autopwn-ng
+sudo bash install-autopwn-ng.sh
+# بررسی بدون تغییر / راهنما:
+bash install-autopwn-ng.sh --dry-run
+bash install-autopwn-ng.sh --help
 ```
 
 ### روش ۳: اجرای autopwn-ng
@@ -94,8 +99,18 @@ sudo autopwn-ng --help                  # راهنما
 sudo autopwn-ng -i wlan1 -I wlan2       # اجرای کامل
 sudo autopwn-ng --dry-run               # شبیه‌سازی بدون ابزار
 sudo autopwn-ng --simulate              # همان --dry-run
+sudo autopwn-ng --doctor                # بررسی سلامت: وابستگی‌ها، GPU/OpenCL، رابط‌ها، وردلیست‌ها
 sudo autopwn-ng --auto                 # یک کلیک: اسکن + برداشت از همه + کرک + گزارش
-sudo autopwn-ng --pmkid-only           # برداشت کوتاه PMKID (۱۵s)؛ در صورت یافتن مستقیم به کرک
+  sudo autopwn-ng --pmkid-only           # برداشت کوتاه PMKID (۱۵s)؛ در صورت یافتن مستقیم به کرک
+  sudo autopwn-ng --scope scope.txt --authorize   # محدود به scope + اجازهٔ صریح
+  sudo autopwn-ng --from-pcap FILE.pcap # حالت offline/crack-only: استخراج + کرک روی pcap موجود (بدون رادیو)
+  sudo autopwn-ng --session myrun --restore  # از سرگیری کرک قطع‌شده (hashcat session)
+  sudo autopwn-ng --auto  # انتخاب خودکار قوی‌ترین شبکهٔ WPA2 + برداشت + کرک + گزارش
+  sudo autopwn-ng --wep  # کرک شبکه‌های WEP (ARP replay / chopchop / fragmentation)
+  sudo autopwn-ng --no-config-extract  # غیرفعال‌کردن استخراج پیکربندی محلی
+  sudo autopwn-ng --compute-wps-pins C8:3A:35:00:B0:0C  # تولید PINهای WPS شناخته‌شده از BSSID
+  # پایگاه دادهٔ PINهای شناخته‌شده: wps-pins.db (OUI -> PIN)، قابل گسترش
+
 ```
 
 ### روش ۴: حذف (uninstall)

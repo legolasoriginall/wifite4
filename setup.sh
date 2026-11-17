@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==========================================================================
 #  wifite4 — نصب کامل و خودکار
-#  استفاده: sudo bash setup.sh [--full|--quick] [--dry-run] [--help]
+#  استفاده: sudo bash setup.sh [--quick] [--only-autopwn] [--dry-run] [--help]
 # ==========================================================================
 set -euo pipefail
 
@@ -9,8 +9,9 @@ export DEBIAN_FRONTEND=noninteractive
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/var/log/wifite4-setup.log"
-WITH_WORDLISTS=1
+DOWNLOAD_WORDLISTS=1
 DRY_RUN=0
+ONLY_AUTOPWN=0
 
 if [[ -t 1 ]]; then
   c_reset=$'\033[0m' c_ok=$'\033[32m' c_warn=$'\033[33m' c_err=$'\033[31m' c_info=$'\033[36m'
@@ -29,23 +30,22 @@ usage() {
 
 استفاده:
   sudo bash setup.sh                 نصب کامل (پیش‌فرض: شامل وردلیست‌ها)
-  sudo bash setup.sh --full          نصب کامل، شامل دانلود وردلیست‌ها
   sudo bash setup.sh --quick         نصب سریع، بدون دانلود وردلیست‌ها
+  sudo bash setup.sh --only-autopwn  فقط نصب مجدد autopwn-ng (بدون بسته‌ها/وردلیست)
   bash setup.sh --dry-run            فقط بررسی پیش‌نیازها و نمایش مراحل
   bash setup.sh --help               همین راهنما
 
 گزینه‌ها:
-  --full           شامل دانلود وردلیست‌ها (پیش‌فرض)
   --quick          بدون دانلود وردلیست‌ها (سریع‌تر)
-  --no-wordlists   نام قدیمی --quick (برای سازگاری پذیرفته می‌شود)
   --dry-run        فقط بررسی پیش‌نیازها و نمایش مراحل
+  --only-autopwn   فقط نصب مجدد autopwn-ng در /usr/local/bin
   --help           همین راهنما
 
 مراحل:
   1) install/01-install-packages.sh      بسته‌های پایه
   2) install/02-build-hostapd-mana.sh    ساخت و نصب hostapd-mana
   3) install/03-download-wordlists.sh    دانلود وردلیست‌ها، ruleها و ساخت kwp (با --quick رد می‌شود)
-  4) نصب autopwn-ng در /usr/local/bin
+  4) install-autopwn-ng.sh    نصب autopwn-ng در /usr/local/bin
 
 گزارش اجرا در /var/log/wifite4-setup.log ذخیره می‌شود.
 EOF
@@ -53,10 +53,9 @@ EOF
 
 while (( $# > 0 )); do
   case "$1" in
-    --full)         WITH_WORDLISTS=1 ;;
-    --quick)        WITH_WORDLISTS=0 ;;
-    --no-wordlists) WITH_WORDLISTS=0 ;;  # alias for --quick
+    --quick)        DOWNLOAD_WORDLISTS=0 ;;
     --dry-run)      DRY_RUN=1 ;;
+    --only-autopwn) ONLY_AUTOPWN=1 ;;
     -h|--help)      usage; exit 0 ;;
     *)              usage >&2; die "گزینه‌ی ناشناخته: $1" ;;
   esac
@@ -64,14 +63,16 @@ while (( $# > 0 )); do
 done
 
 # ---------------------------------------------------------------- root
-if (( EUID != 0 )); then
-  if (( DRY_RUN == 1 )); then
-    warn "dry-run بدون root اجرا می‌شود؛ نصب واقعی به root نیاز دارد."
-  elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    say "دسترسی root لازم است؛ اجرای مجدد با sudo…"
-    exec sudo -E bash "$0" "$@"
-  else
-    die "این اسکریپت به root نیاز دارد: sudo bash setup.sh"
+if [[ "${WIFITE4_TEST_MODE:-0}" != "1" ]]; then
+  if (( EUID != 0 )); then
+    if (( DRY_RUN == 1 )); then
+      warn "dry-run بدون root اجرا می‌شود؛ نصب واقعی به root نیاز دارد."
+    elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+      say "دسترسی root لازم است؛ اجرای مجدد با sudo…"
+      exec sudo -E bash "$0" "$@"
+    else
+      die "این اسکریپت به root نیاز دارد: sudo bash setup.sh"
+    fi
   fi
 fi
 
@@ -121,8 +122,8 @@ ensure_tools() {
     warn "dry-run: apt-get install -y ${missing[*]}"
     return 0
   fi
-  apt-get update -qq
-  apt-get install -y --no-install-recommends "${missing[@]}" \
+  apt-get -o APT::Sandbox::User=root update -qq
+  apt-get -o APT::Sandbox::User=root install -y --no-install-recommends "${missing[@]}" \
     || die "نصب ${missing[*]} ناموفق بود."
   ok "ابزارهای پایه نصب شدند"
 }
@@ -190,30 +191,36 @@ verify_install() {
 }
 
 # ---------------------------------------------------------------- main
-if (( DRY_RUN == 1 )); then
+if (( ONLY_AUTOPWN == 1 )); then
+  say "wifite4 — فقط نصب مجدد autopwn-ng در $REPO_DIR"
+elif (( DRY_RUN == 1 )); then
   say "wifite4 — بررسی پیش‌نیازها و نمایش مراحل (dry-run) در $REPO_DIR"
 else
   say "wifite4 — نصب خودکار در $REPO_DIR"
 fi
-say "بررسی پیش‌نیازها…"
-
-check_os
-check_network
-ensure_tools
-check_disk
-check_wifi
-
-run_step "install/01-install-packages.sh"  "نصب بسته‌های پایه"
-run_step "install/02-build-hostapd-mana.sh" "ساخت و نصب hostapd-mana"
-
-if (( WITH_WORDLISTS == 1 )); then
-  run_step "install/03-download-wordlists.sh" "دانلود وردلیست‌ها و ساخت kwp"
+if (( ONLY_AUTOPWN == 1 )); then
+  run_step "install-autopwn-ng.sh" "نصب autopwn-ng در /usr/local/bin"
+  verify_install
 else
-  warn "مرحله‌ی وردلیست‌ها رد شد (--quick)."
-fi
+  say "بررسی پیش‌نیازها…"
+  check_os
+  check_network
+  ensure_tools
+  check_disk
+  check_wifi
 
-run_step "install-autopwn-ng.sh" "نصب autopwn-ng در /usr/local/bin"
-verify_install
+  run_step "install/01-install-packages.sh"  "نصب بسته‌های پایه"
+  run_step "install/02-build-hostapd-mana.sh" "ساخت و نصب hostapd-mana"
+
+  if (( DOWNLOAD_WORDLISTS == 1 )); then
+    run_step "install/03-download-wordlists.sh" "دانلود وردلیست‌ها و ساخت kwp"
+  else
+    warn "مرحله‌ی وردلیست‌ها رد شد (--quick)."
+  fi
+
+  run_step "install-autopwn-ng.sh" "نصب autopwn-ng در /usr/local/bin"
+  verify_install
+fi
 
 ELAPSED=$((SECONDS - START_TS))
 if (( DRY_RUN == 1 )); then

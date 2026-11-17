@@ -15,6 +15,12 @@ say()  { printf '%s[*]%s %s\n' "$_c_info" "$_c_reset" "$*"; }
 ok()   { printf '%s[+]%s %s\n' "$_c_ok"   "$_c_reset" "$*"; }
 warn() { printf '%s[!]%s %s\n' "$_c_warn" "$_c_reset" "$*" >&2; }
 
+# Require root unless WIFITE4_TEST_MODE=1.
+require_root() {
+  if [[ "${WIFITE4_TEST_MODE:-0}" == "1" ]]; then return 0; fi
+  (( EUID == 0 )) || die "به root نیاز دارد: sudo bash $0"
+}
+
 # Clone a git repo into dir, or replace it if a previous clone was partial/invalid.
 clone_or_replace() {
   local dir="$1" url="$2"

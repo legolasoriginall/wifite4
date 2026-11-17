@@ -13,12 +13,8 @@ else
 fi
 
 say()  { printf '%s[*]%s %s\n' "$c_info" "$c_reset" "$*"; }
-ok()   { printf '%s[+]%s %s\n' "$c_ok" "$c_reset" "$*"; }
 warn() { printf '%s[!]%s %s\n' "$c_warn" "$c_reset" "$*" >&2; }
-err()  { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*"; }
-
-# ---------------------------------------------------------------- prerequisite checks
-die() { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*" >&2; exit 1; }
+die()  { printf '%s[-]%s %s\n' "$c_err" "$c_reset" "$*" >&2; exit 1; }
 
 command -v iw  >/dev/null 2>&1 || die "iw پیدا نشد. ابتدا نصب کن: sudo apt-get install -y iw"
 command -v awk >/dev/null 2>&1 || die "awk پیدا نشد."
@@ -27,11 +23,7 @@ command -v awk >/dev/null 2>&1 || die "awk پیدا نشد."
 (( EUID == 0 )) || die "این اسکریپت باید با sudo اجرا شود: sudo bash script3.sh"
 
 # ---------------------------------------------------------------- check autopwn-ng
-if ! command -v autopwn-ng >/dev/null 2>&1; then
-  err "autopwn-ng در PATH پیدا نشد. ابتدا نصب کنید:"
-  echo "  sudo bash setup.sh  # یا: sudo install -m 755 autopwn-ng.sh /usr/local/bin/autopwn-ng"
-  exit 1
-fi
+command -v autopwn-ng >/dev/null 2>&1 || die "autopwn-ng در PATH پیدا نشد. نصب: sudo bash setup.sh"
 
 # ---------------------------------------------------------------- menu
 show_menu() {
@@ -43,7 +35,7 @@ show_menu() {
   printf '%s║  2) هدف مشخص (target BSSID)           ║%s\n' "$c_info" "$c_reset"
   printf '%s║  3) اسکن سریع (no-twin/no-post)       ║%s\n' "$c_info" "$c_reset"
   printf '%s║  4) dry-run / simulate                ║%s\n' "$c_info" "$c_reset"
-  printf '%s║  5) یک کلیک (auto) — اسکن+برداشت+کرک+گزارش  ║%s\n' "$c_ok" "$c_reset"
+  printf '%s║  5) یک کلیک (auto)                      ║%s\n' "$c_ok" "$c_reset"
   printf '%s║  0) خروج                              ║%s\n' "$c_warn" "$c_reset"
   printf '%s╚══════════════════════════════════════╝%s\n' "$c_bold" "$c_reset"
   echo

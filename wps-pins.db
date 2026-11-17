@@ -1,0 +1,11 @@
+# Bundled known-WPS-PIN database for autopwn-ng
+# Format: <OUI_PREFIX (6 hex, uppercase)>  <PIN (8 digits)>  [# comment]
+# One entry per line. Lines starting with # are comments.
+# Lookup is by the first 3 octets of the BSSID.
+#
+# This list is intentionally small and conservative. Extend it with
+# verified OUI -> default-PIN pairs for your environment; algorithmic
+# PINs (ComputePIN, D-Link, ...) are always tried in addition.
+C83A35  12345670  # example entry (replace/extend with verified pairs)
+001122  98765432  # test fixture entry
+EOF

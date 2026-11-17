@@ -1,0 +1,14 @@
+# Bundled default-PSK database for autopwn-ng
+# Format: <OUI_PREFIX (6 hex uppercase)>  <algorithm|default PSK>  [# comment]
+# algorithm names: speedtouch, thomson, alice, dlink, netgear, tplink, huawei, generic
+# Lines starting with # are comments.
+C83A35  speedtouch   # SpeedTouch/Thomson
+00147F  thomson      # Thomson
+002196  alice        # Alice/AGPF (Telecom Italia)
+00238E  alice        # Alice/AGPF
+0024B2  dlink        # D-Link (default often admin/blank)
+001F33  netgear      # Netgear (serial-based on some models)
+001D0F  tplink       # TP-Link (MAC-suffix on some models)
+00E0FC  huawei       # Huawei (common defaults)
+001122  generic      # test fixture
+EOF

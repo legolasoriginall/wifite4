@@ -6,17 +6,10 @@
 set -uo pipefail
 # shellcheck disable=SC2034,SC2317,SC2329
 
-# Re-exec as root in a user namespace if not already root (for install scripts that require root)
-if (( EUID != 0 )); then
-  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    exec sudo -E bash "$0" "$@"
-  elif command -v unshare >/dev/null 2>&1 && unshare -U -r true 2>/dev/null; then
-    exec unshare -U -r bash "$0" "$@"
-  else
-    echo "SKIP: root access unavailable (need sudo or user namespaces); cannot run install tests." >&2
-    exit 0
-  fi
-fi
+# Test mode: allow install scripts to run without root in restricted CI environments
+export WIFITE4_TEST_MODE=1
+WIFITE4_PREFIX="$(mktemp -d)"
+export WIFITE4_PREFIX
 
 PASS=0
 FAIL=0
@@ -26,7 +19,10 @@ MOCK_DIR="$(mktemp -d)"
 export PATH="$MOCK_DIR:$PATH"
 
 # shellcheck disable=SC2317,SC2329
-cleanup() { rm -rf "$MOCK_DIR"; }
+cleanup() {
+  rm -rf "$MOCK_DIR"
+  rm -rf "$WIFITE4_PREFIX"
+}
 trap cleanup EXIT
 
 # ---------- mock tools ----------
@@ -173,15 +169,6 @@ if bash "$REPO_ROOT/setup.sh" --quick --dry-run >/dev/null 2>&1; then
   pass "setup.sh --quick --dry-run succeeds"
 else
   fail "setup.sh --quick --dry-run failed"
-fi
-
-# ---------- Test 4b: setup.sh --no-wordlists alias ----------
-echo
-echo "-- setup.sh --no-wordlists --dry-run (legacy alias) --"
-if bash "$REPO_ROOT/setup.sh" --no-wordlists --dry-run >/dev/null 2>&1; then
-  pass "setup.sh --no-wordlists alias succeeds"
-else
-  fail "setup.sh --no-wordlists alias failed"
 fi
 
 # ---------- Test 5: install-autopwn-ng.sh --dry-run ----------

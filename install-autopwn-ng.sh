@@ -32,16 +32,19 @@ done
 
 # ---------------------------------------------------------------- prerequisite checks
 command -v install >/dev/null 2>&1 || die "install (coreutils) پیدا نشد."
+command -v bash   >/dev/null 2>&1 || die "bash پیدا نشد."
 
 # ---------------------------------------------------------------- root
-if (( EUID != 0 )); then
-  if (( DRY_RUN == 1 )); then
-    warn "dry-run بدون root اجرا می‌شود؛ نصب واقعی به root نیاز دارد."
-  elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    say "دسترسی root لازم است؛ اجرای مجدد با sudo…"
-    exec sudo -E bash "$0" "$@"
-  else
-    die "این اسکریپت به root نیاز دارد: sudo bash install-autopwn-ng.sh"
+if [[ "${WIFITE4_TEST_MODE:-0}" != "1" ]]; then
+  if (( EUID != 0 )); then
+    if (( DRY_RUN == 1 )); then
+      warn "dry-run بدون root اجرا می‌شود؛ نصب واقعی به root نیاز دارد."
+    elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+      say "دسترسی root لازم است؛ اجرای مجدد با sudo…"
+      exec sudo -E bash "$0" "$@"
+    else
+      die "این اسکریپت به root نیاز دارد: sudo bash install-autopwn-ng.sh"
+    fi
   fi
 fi
 

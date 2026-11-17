@@ -63,6 +63,22 @@ assert_output_contains "--dry-run prints simulation header" "SIMULATION MODE" ba
 assert_output_contains "--simulate prints simulation header" "SIMULATION MODE" bash "$SCRIPT" --simulate
 assert_output_contains "--dry-run prints completion message" "Simulation complete" bash "$SCRIPT" --dry-run
 
+# --- Known WPS PIN computation ---
+echo
+echo "-- Known WPS PIN computation --"
+assert_exit "--compute-wps-pins exits 0" 0 bash "$SCRIPT" --compute-wps-pins C8:3A:35:00:B0:0C
+assert_output_contains "--compute-wps-pins emits 8-digit PIN" "12345670" bash "$SCRIPT" --compute-wps-pins C8:3A:35:00:B0:0C
+assert_output_contains "--compute-wps-pins emits default PIN" "00000000" bash "$SCRIPT" --compute-wps-pins C8:3A:35:00:B0:0C
+assert_output_contains "--compute-wps-pins uses bundled DB" "98765432" bash "$SCRIPT" --compute-wps-pins 00:11:22:33:44:55
+assert_exit "--wep --dry-run exits 0" 0 bash "$SCRIPT" --wep --dry-run
+assert_output_contains "--wep --dry-run prints WEP mode" "WEP cracking" bash "$SCRIPT" --wep --dry-run
+assert_exit "--wps-state --dry-run exits 0" 0 bash "$SCRIPT" --wps-state /tmp/wps.tsv --dry-run
+assert_output_contains "--dry-run prints WPS priority" "WPS: NULL PIN" bash "$SCRIPT" --dry-run
+assert_exit "--no-config-extract --dry-run exits 0" 0 bash "$SCRIPT" --no-config-extract --dry-run
+assert_output_contains "--dry-run prints config extract" "Config extract: enabled" bash "$SCRIPT" --dry-run
+assert_exit "--no-default-psk --dry-run exits 0" 0 bash "$SCRIPT" --no-default-psk --dry-run
+assert_output_contains "--dry-run prints default psk" "Default PSK: enabled" bash "$SCRIPT" --dry-run
+
 # --- Profile selection via dry-run output ---
 echo
 echo "-- Profile selection --"
@@ -124,6 +140,38 @@ assert_exit "stealth profile exits 0" 0 bash "$SCRIPT" -p stealth --dry-run
 assert_exit "brute profile exits 0" 0 bash "$SCRIPT" -p brute --dry-run
 assert_exit "normal profile exits 0" 0 bash "$SCRIPT" -p normal --dry-run
 assert_exit "unknown profile still exits 0" 0 bash "$SCRIPT" -p bogus --dry-run
+
+# --- parse_pcap_creds (mocked tshark) ---
+echo
+echo "-- parse_pcap_creds --"
+MOCKBIN="$(mktemp -d)"
+trap 'rm -rf "$MOCKBIN"' EXIT
+cat > "$MOCKBIN/tshark" <<'MOCK'
+#!/usr/bin/env bash
+args="$*"
+if echo "$args" | grep -q 'Basic'; then
+  printf 't1\t10.0.0.1\texample.com\tGET\t/login\tBasic YWRtaW46c2VjcmV0\n'
+elif echo "$args" | grep -q 'POST'; then
+  printf 't2\t10.0.0.2\texample.com\t/login\tusername=alice&password=p4ss\n'
+fi
+exit 0
+MOCK
+chmod +x "$MOCKBIN/tshark"
+PCAP="$MOCKBIN/sample.pcap"
+printf 'dummy' > "$PCAP"
+LOOT_OUT=$(PATH="$MOCKBIN:$PATH" bash "$SCRIPT" --parse-pcap "$PCAP" 2>&1)
+if echo "$LOOT_OUT" | grep -qF "admin" && echo "$LOOT_OUT" | grep -qF "alice"; then
+  echo "  PASS: parse_pcap_creds populates loot.tsv (Basic + Form)"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: parse_pcap_creds (expected admin and alice)"
+  echo "    output: $(echo "$LOOT_OUT" | head -5)"; FAIL=$((FAIL + 1))
+fi
+if echo "$LOOT_OUT" | grep -qF "Basic" && echo "$LOOT_OUT" | grep -qF "Form"; then
+  echo "  PASS: parse_pcap_creds types present"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: parse_pcap_creds (expected Basic and Form types)"
+  echo "    output: $(echo "$LOOT_OUT" | head -5)"; FAIL=$((FAIL + 1))
+fi
 
 # --- Summary ---
 echo
