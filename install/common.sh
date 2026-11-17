@@ -39,7 +39,7 @@ require_root() {
 # Clone a git repo into dir, or replace it if a previous clone was partial/invalid.
 clone_or_replace() {
   local dir="$1" url="$2"
-  if [ ! -d "$dir/.git" ]; then
+  if [ ! -d "$dir/.git" ] || ! git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     rm -rf "$dir"
     git clone --depth 1 --single-branch "$url" "$dir"
   fi

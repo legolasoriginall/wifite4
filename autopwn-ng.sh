@@ -86,7 +86,7 @@ doctor() {
     _check "$t" "$t" required
   done
   c "Optional tools:"
-  for t in hcxhashtool mdk4 reaver bettercap hostapd-mana wifiphisher bully wash kismet tshark dnsmasq nmap cowpatty jq xxd comm sort awk grep sed nmcli ip; do
+  for t in hcxhashtool mdk4 reaver bettercap hostapd-mana wifiphisher bully wash kismet tshark dnsmasq nmap cowpatty jq xxd nmcli ip; do
     _check "$t" "$t" optional
   done
 
@@ -271,15 +271,23 @@ wps_detect_lockout() {
 }
 
 # ---------- الگوریتم‌های شناخته‌شدهٔ WPS PIN ----------
-# مسیر پایگاه دادهٔ PINهای شناخته‌شده (env WPS_DB یا نسبت به اسکریپت)
-wps_db_path() {
-  if [ -n "${WPS_DB:-}" ] && [ -r "$WPS_DB" ]; then printf '%s' "$WPS_DB"; return 0; fi
+# مسیر یک فایل پایگاه دادهٔ همراه (env var یا جستجو در مسیرهای استاندارد)
+db_path() {
+  # $1 = filename, $2 = env var name (optional)
+  local file="$1" envname="${2:-}"
+  if [ -n "$envname" ] && [ -n "${!envname:-}" ] && [ -r "${!envname}" ]; then
+    printf '%s' "${!envname}"
+    return 0
+  fi
   local d
   for d in "$(dirname "${BASH_SOURCE[0]}")" "$(pwd)" /usr/share/wifite4 /usr/local/share/wifite4; do
-    [ -r "$d/wps-pins.db" ] && { printf '%s' "$d/wps-pins.db"; return 0; }
+    [ -r "$d/$file" ] && { printf '%s' "$d/$file"; return 0; }
   done
   return 1
 }
+
+# مسیر پایگاه دادهٔ PINهای شناخته‌شده
+wps_db_path() { db_path "wps-pins.db" WPS_DB; }
 
 # wps_checksum: checksum استاندارد WPS PIN (7 رقم → 8 رقم)
 wps_checksum() {
@@ -511,14 +519,7 @@ extract_local_config() {
 }
 
 # ---------- استخراج PSK پیش‌فرض (SpeedTouch, D-Link, Netgear, ...) ----------
-default_psk_db_path() {
-  if [ -n "${DEFAULT_PSK_DB:-}" ] && [ -r "$DEFAULT_PSK_DB" ]; then printf '%s' "$DEFAULT_PSK_DB"; return 0; fi
-  local d
-  for d in "$(dirname "${BASH_SOURCE[0]}")" "$(pwd)" /usr/share/wifite4; do
-    [ -r "$d/default-psk.db" ] && { printf '%s' "$d/default-psk.db"; return 0; }
-  done
-  return 1
-}
+default_psk_db_path() { db_path "default-psk.db" DEFAULT_PSK_DB; }
 
 derive_default_psks() {
   # $1 = BSSID, $2 = ESSID  -> prints candidate PSKs (one per line)
