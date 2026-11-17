@@ -1121,8 +1121,9 @@ collect_targets(){
       if (e == "") e = "(hidden)"
       printf "%s|%s|%s|%s|%s\n", b, ch, p, enc, e
     }' "$csv" | sort -u)
-  TARGET_TOTAL=$(printf '%s\n' "$all" | grep -c . || true)
-  TARGET_ROWS=$(printf '%s\n' "$all" | head -20)
+  [ -n "$all" ] || return 0
+  TARGET_TOTAL=$(wc -l <<< "$all")
+  TARGET_ROWS=$(head -20 <<< "$all")
 }
 
 # جدول اهداف (ویژگی بصری اصلی، مثل wifite2)
@@ -1146,22 +1147,18 @@ show_targets(){
     printf '  %s%2d%s  %-17s %s%-3s%s %s%-5s%s %s%-13s%s %s%s%s\n' \
       "$_c" "$i" "$_rst" "$b" "$_bold" "$ch" "$_rst" "$pc" "$p" "$_rst" \
       "$ec" "${enc:0:13}" "$_rst" "$_bold" "$e" "$_rst"
-  done < <(printf '%s\n' "$TARGET_ROWS")
-  local total="${TARGET_TOTAL:-$i}"
-  if [ "$total" -gt "$i" ]; then
-    printf '  %s%d networks discovered — showing first %d (truncated)%s\n' "$_dim" "$total" "$i" "$_rst"
+  done <<< "$TARGET_ROWS"
+  if [ "$TARGET_TOTAL" -gt "$i" ]; then
+    printf '  %s%d networks discovered — showing first %d (truncated)%s\n' "$_dim" "$TARGET_TOTAL" "$i" "$_rst"
   else
-    printf '  %s%d network(s) discovered%s\n' "$_dim" "$total" "$_rst"
+    printf '  %s%d network(s) discovered%s\n' "$_dim" "$TARGET_TOTAL" "$_rst"
   fi
 }
 
 # انتخاب تعاملی هدف با شماره (--interactive)
 select_target(){
-  [ "$INTERACTIVE" -eq 1 ] || return 0
-  [ -n "${TARGET:-}" ] && return 0
-  [ -n "${TARGET_ROWS:-}" ] || { warn "هدف قابل انتخابی پیدا نشد."; return 0; }
   local total choice line b ch p enc e
-  total=$(printf '%s\n' "$TARGET_ROWS" | wc -l)
+  total=$(wc -l <<< "$TARGET_ROWS")
   printf '\n%s?%s شمارهٔ هدف را انتخاب کن [1-%d] (Enter = همه، q = انصراف): ' "$_ok" "$_rst" "$total"
   if ! IFS= read -r choice; then
     warn "ورودی تمام شد؛ ادامه با همهٔ اهداف."
@@ -1175,7 +1172,7 @@ select_target(){
     warn "شمارهٔ نامعتبر: $choice — ادامه با همه."
     return 0
   fi
-  line=$(printf '%s\n' "$TARGET_ROWS" | sed -n "${choice}p")
+  line=$(sed -n "${choice}p" <<< "$TARGET_ROWS")
   if [ -z "$line" ]; then
     warn "شماره خارج از بازه — ادامه با همه."
     return 0
@@ -1194,7 +1191,7 @@ if [ "$SKIP_TO" -le 2 ] && [ "$OFFLINE" -ne 1 ] && command -v hcxdumptool >/dev/
 phase "فاز ۱ — برداشت PMKID + EAPOL + EAP برای ${CAPTURE} ثانیه"
 
 # انتخاب تعاملی هدف: اسکن کوتاه، جدول، سپس برداشت فیلترشده
-if [ "$INTERACTIVE" -eq 1 ] && [ -z "$TARGET" ] && command -v airodump-ng >/dev/null 2>&1; then
+if [ "$INTERACTIVE" -eq 1 ] && [ -z "$TARGET" ]; then
   c "اسکن اولیه ۱۵ ثانیه برای انتخاب هدف…"
   timeout 15 airodump-ng --band abg --output-format csv -w "$WORK/prescan" "$MON" >/dev/null 2>&1 || true
   collect_targets "$WORK/prescan-01.csv"
