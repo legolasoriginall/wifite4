@@ -137,6 +137,34 @@ else
 fi
 rm -f "$SCOPE_TMP"
 
+# --- Active-mode safety (mocked tools) ---
+echo
+echo "-- Active-mode authorization & scope --"
+# Authorization gate in active (non-dry-run) mode: non-interactive without --authorize -> exit 1
+WIFITE4_TEST_MODE=1 bash "$SCRIPT" </dev/null >/dev/null 2>&1
+rc=$?
+if [ "$rc" -eq 1 ]; then
+  echo "  PASS: active mode without --authorize exits 1"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: expected exit 1, got $rc"; FAIL=$((FAIL + 1))
+fi
+
+# Scope filtering in active mode: out-of-scope target -> exit 1 before capture
+ACTIVE_MOCK="$(mktemp -d)"
+for t in hcxdumptool airodump-ng hashcat; do printf '#!/usr/bin/env bash\nexit 0\n' > "$ACTIVE_MOCK/$t" && chmod +x "$ACTIVE_MOCK/$t"; done
+ACTIVE_SCOPE="$(mktemp)"
+printf '11:22:33:44:55:66\n' > "$ACTIVE_SCOPE"
+PATH="$ACTIVE_MOCK:/usr/bin:/bin" WIFITE4_TEST_MODE=1 bash "$SCRIPT" --target AA:BB:CC:DD:EE:FF --scope "$ACTIVE_SCOPE" --authorize >"$ACTIVE_MOCK/out.txt" 2>&1
+ACTIVE_RC=$?
+ACTIVE_OUT=$(cat "$ACTIVE_MOCK/out.txt")
+if [ "$ACTIVE_RC" -eq 1 ] && printf '%s\n' "$ACTIVE_OUT" | grep -qF "خارج از scope"; then
+  echo "  PASS: active mode rejects out-of-scope target"; PASS=$((PASS + 1))
+else
+  echo "  FAIL: active scope rejection (rc=$ACTIVE_RC)"; FAIL=$((FAIL + 1))
+  echo "    output: $(echo "$ACTIVE_OUT" | head -3)"
+fi
+rm -rf "$ACTIVE_MOCK" "$ACTIVE_SCOPE"
+
 # --- Summary ---
 echo
 echo "==============================="

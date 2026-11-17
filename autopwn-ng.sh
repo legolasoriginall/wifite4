@@ -807,7 +807,7 @@ command -v hashcat >/dev/null || warn "hashcat نصب نیست؛ cracking غیر
 if [ "$OFFLINE" -eq 1 ]; then
   command -v hcxpcapngtool >/dev/null || warn "hcxpcapngtool نصب نیست؛ استخراج غیرفعال می‌شود."
 else
-  (( EUID == 0 )) || { err "با sudo اجرا کن."; exit 1; }
+  if [ "${WIFITE4_TEST_MODE:-0}" != "1" ]; then (( EUID == 0 )) || { err "با sudo اجرا کن."; exit 1; }; fi
   command -v hcxdumptool >/dev/null || warn "hcxdumptool نصب نیست؛ برداشت غیرفعال می‌شود."
   command -v iw >/dev/null || warn "iw نصب نیست؛ آماده‌سازی رادیو غیرفعال می‌شود."
   command -v mdk4 >/dev/null || warn "mdk4 نصب نیست؛ دِاوث ضعیف‌تر می‌شود."
