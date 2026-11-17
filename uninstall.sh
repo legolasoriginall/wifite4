@@ -56,7 +56,7 @@ if (( EUID != 0 )); then
     warn "dry-run بدون root اجرا می‌شود؛ حذف واقعی به root نیاز دارد."
   elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
     say "دسترسی root لازم است؛ اجرای مجدد با sudo…"
-    exec sudo -E bash "$0" "$@"
+    exec sudo -n bash "$0" "$@"
   else
     die "این اسکریپت به root نیاز دارد: sudo bash uninstall.sh"
   fi

@@ -25,7 +25,7 @@ ensure_root() {
   fi
   if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
     say "دسترسی root لازم است؛ اجرای مجدد با sudo…"
-    exec sudo -E bash "$0" "$@"
+    exec sudo -n bash "$0" "$@"
   fi
   die "این اسکریپت به root نیاز دارد: sudo bash $0"
 }
