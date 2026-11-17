@@ -54,6 +54,7 @@ EOF
 while (( $# > 0 )); do
   case "$1" in
     --quick)        DOWNLOAD_WORDLISTS=0 ;;
+    --full)         ;;  # backward-compatible no-op (full install is default)
     --dry-run)      DRY_RUN=1 ;;
     --only-autopwn) ONLY_AUTOPWN=1 ;;
     -h|--help)      usage; exit 0 ;;
